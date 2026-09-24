@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>撤离区 · 西幻卡牌冒险</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎒</text></svg>"
+    />
+    <link rel="stylesheet" href="styles/game.css" />
+  </head>
+  <body>
+    <!-- 逻辑分辨率 1280×720，整体等比缩放 -->
+    <div id="stage">
+      <div id="screen"></div>
+      <div id="fx-layer"></div>
+    </div>
+    <!-- B站 Toy JS SDK 由 src/core/toy.js 异步动态加载，避免阻塞页面 -->
+    <!-- 经典 script 按依赖顺序加载（共享全局作用域），保持 file:// 双击可玩 -->
+    <script src="src/core/utils.js"></script>
+    <script src="src/core/config.js"></script>
+    <script src="src/core/state.js"></script>
+    <script src="src/core/save.js"></script>
+    <script src="src/core/toy.js"></script>
+    <script src="src/data/cards.js"></script>
+    <script src="src/data/enemies.js"></script>
+    <script src="src/data/potions.js"></script>
+    <script src="src/data/buffs.js"></script>
+    <script src="src/data/events.js"></script>
+    <script src="src/systems/mapgen.js"></script>
+    <script src="src/systems/combat.js"></script>
+    <script src="src/systems/run.js"></script>
+    <script src="src/systems/run_encounters.js"></script>
+    <script src="src/systems/run_rewards.js"></script>
+    <script src="src/systems/run_settlement.js"></script>
+    <script src="src/systems/meta.js"></script>
+    <script src="src/ui/dom.js"></script>
+    <script src="src/ui/cardui.js"></script>
+    <script src="src/ui/hud.js"></script>
+    <script src="src/ui/mapui.js"></script>
+    <script src="src/ui/battleui.js"></script>
+    <script src="src/ui/safeui.js"></script>
+    <script src="src/main.js"></script>
+  </body>
+</html>
