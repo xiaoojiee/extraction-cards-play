@@ -20,9 +20,13 @@
  *  powerHeal{v}            能力：每回合结束回复生命
  *  powerEnergy{v}          能力：每回合 +能量
  *  powerStr{v}             能力：每回合获得力量
+ *  summon{id,n,attack,hp}  召唤可跨战斗存活的伙伴
  */
 
 const CARDS = {};
+const SUMMONS = {
+  penguin: { id: 'penguin', name: '小企鹅', emoji: '🐧', image: 'assets/卡面/咕咕嘎嘎-香企鹅.png' },
+};
 function defCard(c) {
   CARDS[c.id] = c;
   return c;
@@ -312,6 +316,444 @@ defCard({
   fx: [{ k: 'powerBlock', v: 2 }],
 });
 
+/* 华强买瓜双人精英的签名卡：所有效果由 fx 驱动，卡面沿用角色原图。 */
+defCard({
+  id: 'unripe_melon',
+  name: '生瓜蛋子',
+  emoji: '🍉',
+  characterId: 'melon_vendor_elite',
+  art: 'melon-vendor',
+  tags: ['攻击', '首击强化'],
+  quote: '这瓜一看就不对劲。',
+  type: 'attack',
+  rarity: 'common',
+  cost: 1,
+  exhaust: false,
+  fx: [{ k: 'dmg', v: 6, bonusFirstHit: 3 }],
+});
+defCard({
+  id: 'two_yuan_melon',
+  name: '瓜两块钱一斤',
+  emoji: '🪙',
+  characterId: 'melon_vendor_elite',
+  art: 'melon-vendor',
+  tags: ['能力', '金币'],
+  quote: '买卖归买卖，账可得算清楚。',
+  type: 'power',
+  rarity: 'epic',
+  cost: 2,
+  exhaust: true,
+  fx: [{ k: 'goldPerHit', v: 2 }],
+});
+defCard({
+  id: 'electric_scooter',
+  name: '电驴',
+  emoji: '🛡️',
+  characterId: 'liu_huaqiang_elite',
+  art: 'liu-huaqiang',
+  tags: ['能力', '防御'],
+  quote: '先把护具安排明白。',
+  type: 'power',
+  rarity: 'common',
+  cost: 1,
+  exhaust: true,
+  fx: [{ k: 'status', st: 'dex', v: 1, target: 'self' }],
+});
+defCard({
+  id: 'unripe_check',
+  name: '这瓜保熟吗',
+  emoji: '🔪',
+  characterId: 'liu_huaqiang_elite',
+  art: 'liu-huaqiang',
+  tags: ['攻击', '虚弱'],
+  quote: '华强盯着瓜看了两眼。',
+  type: 'attack',
+  rarity: 'rare',
+  cost: 2,
+  exhaust: true,
+  fx: [
+    { k: 'dmg', v: 10, bonusIfVulnerable: 6 },
+    { k: 'status', st: 'weak', v: 2, target: 'enemy', ifTargetVulnerable: true },
+  ],
+});
+defCard({
+  id: 'pick_melon',
+  name: '挑瓜',
+  emoji: '🤔',
+  characterId: 'melon_vendor_elite',
+  art: 'melon-vendor',
+  tags: ['技能', '抽牌'],
+  quote: '先挑好的，再省下一笔。',
+  type: 'skill',
+  rarity: 'rare',
+  cost: 1,
+  exhaust: false,
+  fx: [
+    { k: 'draw', v: 2 },
+    { k: 'nextAttackDiscount', v: 1 },
+  ],
+});
+defCard({
+  id: 'huaqiang_split',
+  name: '华强劈瓜',
+  emoji: '💥',
+  characterId: 'liu_huaqiang_elite',
+  art: 'liu-huaqiang',
+  tags: ['攻击', '易伤'],
+  quote: '这一刀下去，结果立见分晓。',
+  type: 'attack',
+  rarity: 'epic',
+  cost: 2,
+  exhaust: true,
+  fx: [
+    {
+      k: 'dmg',
+      v: 16,
+      onKill: [
+        { k: 'block', v: 8 },
+        { k: 'draw', v: 1 },
+      ],
+      onSurvive: [{ k: 'status', st: 'vuln', v: 3, target: 'enemy' }],
+    },
+  ],
+});
+defCard({
+  id: 'fruit_shop',
+  name: '我开水果店的',
+  emoji: '🍎',
+  characterId: 'melon_vendor_elite',
+  art: 'melon-vendor',
+  tags: ['能力', '易伤'],
+  quote: '该出手时也不能含糊。',
+  type: 'power',
+  rarity: 'epic',
+  cost: 1,
+  exhaust: true,
+  fx: [{ k: 'vulnerableDamage', v: 3 }],
+});
+defCard({
+  id: 'mao_die_swat',
+  name: '偷家',
+  emoji: '🐾',
+  characterId: 'mao_die',
+  art: 'mao-die',
+  tags: ['攻击', '格挡'],
+  quote: '旧版卡牌已按设计表调整。',
+  type: 'skill',
+  rarity: 'common',
+  cost: 0,
+  exhaust: false,
+  legacy: true,
+  fx: [{ k: 'dmg', v: 6, blockEqualDamage: true }],
+});
+defCard({
+  id: 'mao_die_stare',
+  name: '哈气',
+  emoji: '👁️',
+  characterId: 'mao_die',
+  art: 'mao-die',
+  tags: ['虚弱', '哈气'],
+  quote: '旧版卡牌已按设计表调整。',
+  type: 'skill',
+  rarity: 'rare',
+  cost: 1,
+  exhaust: false,
+  legacy: true,
+  fx: [
+    { k: 'status', st: 'weak', v: 1, target: 'enemy' },
+    { k: 'huff', v: 1 },
+  ],
+});
+defCard({
+  id: 'mao_die_roll',
+  name: '合并同类项攻击',
+  emoji: '🐈',
+  characterId: 'mao_die',
+  art: 'mao-die',
+  tags: ['攻击', '恢复'],
+  quote: '旧版卡牌已按设计表调整。',
+  type: 'attack',
+  rarity: 'epic',
+  cost: 2,
+  exhaust: true,
+  legacy: true,
+  fx: [{ k: 'dmg', v: 10, onKillHealMaxFraction: 0.5 }],
+});
+
+/* 下方角色卡按《华强买瓜卡牌表（含耄耋系列） (2).xlsx》逐行配置。 */
+defCard({
+  id: 'mao_hiss',
+  name: '哈气',
+  emoji: '😾',
+  characterId: 'mao_die',
+  art: 'mao-die',
+  tags: ['虚弱', '哈气'],
+  type: 'skill',
+  rarity: 'rare',
+  cost: 1,
+  exhaust: false,
+  fx: [
+    { k: 'status', st: 'weak', v: 1, target: 'enemy' },
+    { k: 'huff', v: 1 },
+  ],
+});
+defCard({
+  id: 'mao_home_raid',
+  name: '偷家',
+  emoji: '🐾',
+  characterId: 'mao_die',
+  art: 'mao-die',
+  tags: ['攻击', '格挡'],
+  type: 'skill',
+  rarity: 'common',
+  cost: 0,
+  exhaust: false,
+  fx: [{ k: 'dmg', v: 6, blockEqualDamage: true }],
+});
+defCard({
+  id: 'mao_spine_dragon',
+  name: '脊背龙形态',
+  emoji: '🐉',
+  characterId: 'mao_die',
+  art: 'mao-die',
+  tags: ['能力', '攻击'],
+  type: 'power',
+  rarity: 'rare',
+  cost: 1,
+  exhaust: true,
+  fx: [{ k: 'powerAttackEcho', chance: 0.25 }],
+});
+defCard({
+  id: 'mao_overlord',
+  name: '王霸之气',
+  emoji: '👑',
+  characterId: 'mao_die',
+  art: 'mao-die',
+  tags: ['虚弱', '易伤'],
+  type: 'skill',
+  rarity: 'epic',
+  cost: 0,
+  exhaust: true,
+  fx: [
+    { k: 'status', st: 'weak', v: 10, target: 'enemy' },
+    { k: 'status', st: 'vuln', v: 10, target: 'enemy' },
+  ],
+});
+defCard({
+  id: 'mao_combine',
+  name: '合并同类项攻击',
+  emoji: '🐈',
+  characterId: 'mao_die',
+  art: 'mao-die',
+  tags: ['攻击', '恢复'],
+  type: 'attack',
+  rarity: 'epic',
+  cost: 2,
+  exhaust: true,
+  fx: [{ k: 'dmg', v: 10, onKillHealMaxFraction: 0.5 }],
+});
+
+defCard({
+  id: 'dog_bark',
+  name: '叫',
+  emoji: '🐕',
+  characterId: 'big_dog',
+  art: 'big-dog',
+  tags: ['防御', '虚弱'],
+  type: 'skill',
+  rarity: 'common',
+  cost: 1,
+  exhaust: false,
+  fx: [
+    { k: 'block', v: 5 },
+    { k: 'status', st: 'weak', v: 1, target: 'enemy' },
+  ],
+});
+defCard({
+  id: 'dog_snarl',
+  name: '龇牙',
+  emoji: '🦷',
+  characterId: 'big_dog',
+  art: 'big-dog',
+  tags: ['易伤'],
+  type: 'skill',
+  rarity: 'common',
+  cost: 0,
+  exhaust: false,
+  fx: [{ k: 'status', st: 'vuln', v: 1, target: 'enemy' }],
+});
+defCard({
+  id: 'dog_pounce',
+  name: '扑咬',
+  emoji: '🐾',
+  characterId: 'big_dog',
+  art: 'big-dog',
+  tags: ['攻击'],
+  type: 'attack',
+  rarity: 'common',
+  cost: 1,
+  exhaust: false,
+  fx: [{ k: 'dmg', v: 6 }],
+});
+defCard({
+  id: 'dog_growl',
+  name: '低吼',
+  emoji: '🐶',
+  characterId: 'big_dog',
+  art: 'big-dog',
+  tags: ['抽牌'],
+  type: 'skill',
+  rarity: 'common',
+  cost: 1,
+  exhaust: false,
+  fx: [{ k: 'draw', v: 1 }],
+});
+defCard({
+  id: 'dog_bark_bark',
+  name: '叫叫叫',
+  emoji: '📣',
+  characterId: 'big_dog',
+  art: 'big-dog',
+  tags: ['防御', '攻击强化'],
+  type: 'skill',
+  rarity: 'rare',
+  cost: 1,
+  exhaust: false,
+  fx: [
+    { k: 'block', v: 8 },
+    { k: 'nextTurnAttackBonus', v: 4 },
+  ],
+});
+defCard({
+  id: 'dog_set_on',
+  name: '放狗咬人',
+  emoji: '💥',
+  characterId: 'big_dog',
+  art: 'big-dog',
+  tags: ['攻击', '虚弱'],
+  type: 'attack',
+  rarity: 'rare',
+  cost: 2,
+  exhaust: false,
+  fx: [{ k: 'dmg', v: 10, bonusIfWeak: 6 }],
+});
+
+defCard({
+  id: 'gugu',
+  name: '咕咕',
+  emoji: '🐧',
+  characterId: 'gugugaga',
+  art: 'gugugaga-scent',
+  tags: ['召唤'],
+  type: 'skill',
+  rarity: 'common',
+  cost: 0,
+  exhaust: false,
+  fx: [{ k: 'summon', id: 'penguin', n: 1, attack: 1, hp: 1 }],
+});
+defCard({
+  id: 'gaga',
+  name: '嘎嘎',
+  emoji: '🐧',
+  characterId: 'gugugaga',
+  art: 'gugugaga-scent',
+  tags: ['召唤强化', '防御'],
+  type: 'skill',
+  rarity: 'common',
+  cost: 1,
+  exhaust: true,
+  fx: [
+    { k: 'summonAttackAll', v: 2 },
+    { k: 'block', v: 5 },
+  ],
+});
+defCard({
+  id: 'gather_penguin',
+  name: '凑企鹅',
+  emoji: '🐧',
+  characterId: 'gugugaga',
+  art: 'gugugaga-gather',
+  tags: ['攻击', '同化'],
+  type: 'attack',
+  rarity: 'common',
+  cost: 1,
+  exhaust: false,
+  fx: [
+    { k: 'status', st: 'assimilation', v: 1, target: 'enemy' },
+    { k: 'dmg', v: 3 },
+    { k: 'summonAttack' },
+  ],
+});
+defCard({
+  id: 'gugugaga',
+  name: '咕咕嘎嘎',
+  emoji: '🐧',
+  characterId: 'gugugaga',
+  art: 'gugugaga-scent',
+  tags: ['召唤'],
+  type: 'skill',
+  rarity: 'rare',
+  cost: 1,
+  exhaust: true,
+  fx: [{ k: 'summon', id: 'penguin', n: 2, attack: 2, hp: 2 }],
+});
+defCard({
+  id: 'meme_contamination',
+  name: '模因污染',
+  emoji: '🌀',
+  characterId: 'gugugaga',
+  art: 'gugugaga-scent',
+  tags: ['同化'],
+  type: 'skill',
+  rarity: 'rare',
+  cost: 1,
+  exhaust: true,
+  fx: [{ k: 'assimilationAura', v: 2 }],
+});
+defCard({
+  id: 'penguin_swarm',
+  name: '企鹅群',
+  emoji: '🐧',
+  characterId: 'gugugaga',
+  art: 'gugugaga-scent',
+  tags: ['能力', '召唤强化'],
+  type: 'power',
+  rarity: 'rare',
+  cost: 2,
+  exhaust: true,
+  fx: [{ k: 'powerPenguinGroup', v: 1 }],
+});
+
+const NORMAL_CARD_POOL = [
+  'dog_bark',
+  'dog_snarl',
+  'dog_pounce',
+  'dog_growl',
+  'dog_bark_bark',
+  'dog_set_on',
+  'gugu',
+  'gaga',
+  'gather_penguin',
+  'gugugaga',
+  'meme_contamination',
+  'penguin_swarm',
+];
+
+const ELITE_CARD_POOL = [
+  'unripe_melon',
+  'two_yuan_melon',
+  'electric_scooter',
+  'unripe_check',
+  'pick_melon',
+  'huaqiang_split',
+  'fruit_shop',
+  'mao_hiss',
+  'mao_home_raid',
+  'mao_spine_dragon',
+  'mao_overlord',
+  'mao_combine',
+];
+
 /* 生成所有升级卡（须在全部 defCard 之后调用；cards_pool.js 会再调一次以覆盖扩展卡池） */
 buildUpgrades();
 
@@ -335,7 +777,14 @@ function starterDeck() {
 
 /* 战斗掉落 / 商店可出现的卡池（废料与升级卡除外） */
 function lootPool() {
-  return Object.keys(CARDS).filter((id) => !CARDS[id].junk && !CARDS[id].upgraded);
+  return Object.keys(CARDS).filter(
+    (id) =>
+      !CARDS[id].junk &&
+      !CARDS[id].upgraded &&
+      !CARDS[id].legacy &&
+      !ELITE_CARD_POOL.includes(id) &&
+      !NORMAL_CARD_POOL.includes(id),
+  );
 }
 
 /* 抽取指定稀有度的卡池；该稀有度没有卡时回退到整个卡池 */
@@ -367,15 +816,37 @@ function rollCardId(danger, lootMul) {
   return RNG.pick(cardPoolByRarity(rar));
 }
 
+function fxSummary(fx) {
+  return fx
+    .map((f) => {
+      if (f.k === 'block') return `获得 ${f.v} 点护甲`;
+      if (f.k === 'draw') return `抽 ${f.v} 张牌`;
+      if (f.k === 'status') return `使目标获得 ${f.v} 层${STATUS[f.st].name}`;
+      return '';
+    })
+    .filter(Boolean)
+    .join('并');
+}
+
 /* 文案：从 fx 自动生成 */
 function cardText(card) {
   const parts = [];
   for (let i = 0; i < card.fx.length; i++) {
     const f = card.fx[i];
     switch (f.k) {
-      case 'dmg':
-        parts.push(f.times > 1 ? `造成 ${f.v} 点伤害，${f.times} 次` : `造成 ${f.v} 点伤害`);
+      case 'dmg': {
+        let text = f.times > 1 ? `造成 ${f.v} 点伤害，${f.times} 次` : `造成 ${f.v} 点伤害`;
+        if (f.bonusFirstHit) text += `；若本回合未攻击该目标，额外造成 ${f.bonusFirstHit} 点伤害`;
+        if (f.bonusIfVulnerable) text += `；目标有易伤时额外造成 ${f.bonusIfVulnerable} 点伤害`;
+        if (f.bonusIfWeak) text += `；目标有虚弱时额外造成 ${f.bonusIfWeak} 点伤害`;
+        if (f.blockEqualDamage) text += '；获得等同于实际生命伤害的护甲';
+        if (f.onKillHealMaxFraction)
+          text += `；击杀后回复目标最大生命的 ${Math.round(f.onKillHealMaxFraction * 100)}%`;
+        if (f.onKill && f.onKill.length) text += `；击杀后${fxSummary(f.onKill)}`;
+        if (f.onSurvive && f.onSurvive.length) text += `；未击杀时${fxSummary(f.onSurvive)}`;
+        parts.push(text);
         break;
+      }
       case 'dmgAll':
         parts.push(
           f.times > 1
@@ -413,9 +884,48 @@ function cardText(card) {
       case 'status': {
         const who =
           f.target === 'allEnemies' ? '所有敌人' : f.target === 'self' ? '自身' : '目标敌人';
-        parts.push(`使${who}获得 ${f.v} 层${STATUS[f.st].name}`);
+        parts.push(
+          (f.ifTargetVulnerable ? '目标有易伤时，' : '') +
+            `使${who}获得 ${f.v} 层${STATUS[f.st].name}` +
+            (f.st === 'assimilation' ? '（其死亡时召唤同化层数生命的小企鹅）' : ''),
+        );
         break;
       }
+      case 'summon':
+        parts.push(
+          `召唤 ${f.n} 只${SUMMONS[f.id].name}（${f.attack} 攻 / ${f.hp} 血，随本次行动同行）`,
+        );
+        break;
+      case 'summonAttackAll':
+        parts.push(`所有小企鹅攻击力 +${f.v}`);
+        break;
+      case 'summonAttack':
+        parts.push('随机 1 只小企鹅对目标攻击 1 次');
+        break;
+      case 'assimilationAura':
+        parts.push(`目标敌人每回合获得 ${f.v} 层同化`);
+        break;
+      case 'powerPenguinGroup':
+        parts.push(`本场战斗每召唤 1 只小企鹅，所有小企鹅攻击力 +${f.v}`);
+        break;
+      case 'huff':
+        parts.push(`获得 ${f.v} 点哈气；每累计 3 点，下次造成的伤害翻倍`);
+        break;
+      case 'powerAttackEcho':
+        parts.push(`本场战斗攻击牌有 ${Math.round(f.chance * 100)}% 概率额外触发 1 次效果`);
+        break;
+      case 'nextTurnAttackBonus':
+        parts.push(`下回合首次攻击牌伤害 +${f.v}`);
+        break;
+      case 'goldPerHit':
+        parts.push(`本场战斗中每次有效攻击获得 ${f.v} 金币`);
+        break;
+      case 'nextAttackDiscount':
+        parts.push(`本回合下一张攻击牌费用 -${f.v}`);
+        break;
+      case 'vulnerableDamage':
+        parts.push(`本场战斗中攻击易伤敌人时额外造成 ${f.v} 点伤害`);
+        break;
       case 'powerBlock':
         parts.push(`每回合开始获得 ${f.v} 点护甲`);
         break;

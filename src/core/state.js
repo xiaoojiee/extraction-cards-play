@@ -24,6 +24,7 @@ const meta = {
   secureSlots: 0, // 保险箱额外格数（解锁/购买）
   upgrades: { deckMax: 0, backpackMax: 0, potionSlots: 0 },
   stats: { raids: 0, extracts: 0, deaths: 0, kills: 0, bestDepth: 0, bestGold: 0 },
+  worldMap: null, // 持久保存已探索的大世界地形与地点
   seenTutorial: false,
 };
 
@@ -32,8 +33,14 @@ let run = null; // 由 run.js 的 startRun() 创建
 
 /* ---- 界面状态 ---- */
 const ui = {
-  screen: 'loading', // loading | safe | map | scene | battle | result | guide
-  safeTab: 'stash', // stash | shop | loadout
+  screen: 'loading', // loading | safe | spawn | map | scene | battle | result | guide
+  safeTab: 'zones', // zones | stash | shop | rank
+  loadout: null, // 仓库下标，仓库删除物品时同步重排
+  zonePick: 'suburb',
+  worldSpawnChoice: 'origin',
+  mapDebug: { open: false, active: false, tileType: 'combat', biome: 'woodland', wall: false },
+  mapZoom: 1,
+  mapLogOpen: false,
   modal: null, // { kind, ... } 由 hud.js 渲染
   logs: [],
   toast: null,
@@ -66,6 +73,16 @@ function openModal(m) {
   refresh();
 }
 function closeModal() {
+  const m = ui.modal;
+  if (!m || m.kind === 'reward') return false;
+  if (m.kind === 'upgrade' && m.source === 'shop' && run && run.shopStock) {
+    ui.modal = { kind: 'shop', stock: run.shopStock };
+    refresh();
+    return true;
+  }
+  if (m.kind === 'shop' && run && run.mode === 'map') ui.screen = 'map';
+  if (m.kind === 'shop' && run) run.shopStock = null;
   ui.modal = null;
   refresh();
+  return true;
 }

@@ -2,19 +2,20 @@
 
 /* 顶栏 / 日志 / 弹窗 / 提示条 */
 
-/* global ui, run, meta, el, btn, bar, cardEl, cardGrid, potionEl, buffEl, goldText, cardText,
+/* global ui, run, meta, el, btn, bar, cardEl, cardGrid, potionEl, buffEl, statusChips, goldText, cardText,
    potionText, buffDesc, buffScopeText, RARITY, CARDS, POTIONS, BUFFS, ZONES, STATUS, VIEW_W,
    closeModal, chooseBuff, chooseEventOption, closeEvent, closeShop, shopBuyCard, shopBuyPotion,
    shopSellCard, doExtract, secureAdd, cardSellPrice, potionSlots, deckMax, runTotals,
    secureCap, runGiveCard, runLog, markTileCleared, canUpgradeCard, upgradedId, pickUpgrade,
    shopUpgrade, shopPayout, FIRE_HEAL_RATE, SHOP_UPGRADE_COST, fireRest, fireSmith,
-   upgradableCount, sortBar, sortCardIds, refresh, claimBattleReward */
+   upgradableCount, sortBar, sortCardIds, refresh, claimBattleReward, settingsModal */
 
 /* ===================== 顶栏 ===================== */
 function topBar(opts) {
   opts = opts || {};
-  const hp = run ? run.hp : meta.maxHp;
-  const maxHp = run ? run.maxHp : meta.maxHp;
+  const battle = run && run.mode === 'battle' ? run.battle : null;
+  const hp = battle ? battle.hp : run ? run.hp : meta.maxHp;
+  const maxHp = battle ? battle.maxHp : run ? run.maxHp : meta.maxHp;
   const left = el('div', { class: 'top-left' }, [
     el('div', { class: 'hp-wrap' }, [
       el('span', { class: 'hp-emoji', text: '❤️' }),
@@ -22,13 +23,29 @@ function topBar(opts) {
     ]),
   ]);
   if (run) {
-    left.appendChild(el('span', { class: 'stat', text: '⚠️ 危险度 ' + run.danger }));
-    left.appendChild(el('span', { class: 'stat', text: '⌖ 步数 ' + run.steps }));
+    if (battle) {
+      left.appendChild(
+        el('span', {
+          class: 'stat',
+          title: '玩家护甲只保护玩家，召唤物受击不会消耗此护甲',
+          text: '🛡 护甲 ' + battle.block,
+        }),
+      );
+      if (Object.values(battle.st).some((value) => value > 0)) {
+        const statuses = statusChips(battle.st);
+        statuses.classList.add('top-status');
+        left.appendChild(statuses);
+      }
+    } else {
+      left.appendChild(el('span', { class: 'stat', text: '⚠️ 危险度 ' + run.danger }));
+      left.appendChild(el('span', { class: 'stat', text: '⌖ 步数 ' + run.steps }));
+    }
   }
   const right = el('div', { class: 'top-right' });
   if (run) {
     right.appendChild(el('span', { class: 'stat', text: '🪙 ' + run.gold + ' 金币' }));
-    right.appendChild(el('span', { class: 'stat', text: run.zone.emoji + ' ' + run.zone.name }));
+    if (!battle)
+      right.appendChild(el('span', { class: 'stat', text: run.zone.emoji + ' ' + run.zone.name }));
     right.appendChild(
       el(
         'div',
@@ -70,10 +87,20 @@ function modalView() {
   else if (m.kind === 'pile') body = pileModal(m);
   else if (m.kind === 'help') body = helpModal(m);
   else if (m.kind === 'bag') body = bagModal(m);
+  else if (m.kind === 'settings') body = settingsModal(m);
   if (!body) return null;
   const wide = m.kind === 'pile' || m.kind === 'upgrade' || m.kind === 'shop';
   return el('div', { class: 'modal-mask' }, [
-    el('div', { class: 'modal ' + (m.kind || '') + (wide ? ' wide' : '') }, body),
+    el(
+      'div',
+      {
+        class: 'modal ' + (m.kind || '') + (wide ? ' wide' : ''),
+        role: 'dialog',
+        'aria-modal': 'true',
+        'aria-label': m.title || '游戏菜单',
+      },
+      body,
+    ),
   ]);
 }
 
@@ -148,12 +175,7 @@ function upgradeModal(m) {
         ]);
       }),
     ),
-    btn('取消', 'ghost', () => {
-      if (m.source === 'shop') {
-        ui.modal = { kind: 'shop', stock: run.shopStock };
-        refresh();
-      } else closeModal();
-    }),
+    btn('取消', 'ghost', closeModal),
   ];
 }
 
@@ -164,7 +186,10 @@ function rewardModal(m) {
   if (potion) summary.push(`消耗品「${potion.name}」`);
   const kids = [
     el('div', { class: 'modal-title', text: '🏆 ' + (m.title || '战利品') }),
-    el('div', { class: 'modal-sub', text: `待认领：${summary.join('、')}。选一张卡牌也会一并领取。` }),
+    el('div', {
+      class: 'modal-sub',
+      text: `待认领：${summary.join('、')}。选一张卡牌也会一并领取。`,
+    }),
     cardGrid(
       m.ids.map((id, i) => ({
         card: CARDS[id],
@@ -173,7 +198,8 @@ function rewardModal(m) {
       })),
     ),
   ];
-  if (m.allowSkip) kids.push(btn('领取金币与消耗品（跳过卡牌）', 'ghost', () => claimBattleReward(null)));
+  if (m.allowSkip)
+    kids.push(btn('领取金币与消耗品（跳过卡牌）', 'ghost', () => claimBattleReward(null)));
   return kids;
 }
 
@@ -183,7 +209,7 @@ function buffModal(m) {
     el('div', { class: 'modal-sub', text: '符文石只允许你选择一项增益' }),
     el(
       'div',
-    { class: 'buff-grid' },
+      { class: 'buff-grid' },
       m.ids.map((id) => {
         const b = BUFFS[id];
         return el(
@@ -216,14 +242,27 @@ function eventModal(m) {
       el(
         'div',
         { class: 'opt-list' },
-        e.options.map((o, i) =>
-          el('div', { class: 'opt', onclick: () => chooseEventOption(i) }, [
-            el('div', { class: 'opt-label', text: o.label }),
-            el('div', { class: 'opt-hint', text: o.hint }),
-          ]),
-        ),
+        e.options.map((o, i) => {
+          const enabled = !o.canChoose || o.canChoose();
+          return el(
+            'div',
+            {
+              class: 'opt' + (enabled ? '' : ' disabled'),
+              onclick: enabled ? () => chooseEventOption(i) : null,
+              title: enabled ? '' : o.disabledHint || '当前条件不满足',
+            },
+            [
+              el('div', { class: 'opt-label', text: o.label }),
+              el('div', {
+                class: 'opt-hint',
+                text: enabled ? o.hint : o.disabledHint || o.hint + '（条件不满足）',
+              }),
+            ],
+          );
+        }),
       ),
     );
+    if (m.fromWorld) kids.push(btn('离开事件', 'ghost', closeEvent));
   } else {
     kids.push(el('div', { class: 'event-result', text: m.result }));
     kids.push(btn('继续', 'primary', closeEvent));
@@ -410,7 +449,9 @@ function helpModal() {
       el('p', {
         text: '4. 所有卡牌都要先点选。单体牌再点击敌人立即打出；无需目标的牌再次点击所选牌、点战场空白或按“打出 / 使用所选”。',
       }),
-      el('p', { text: '5. 选目标会预览预计效果；出牌前不扣能量。可点击取消、按 Esc 或右键取消，也可用方向键切换目标。' }),
+      el('p', {
+        text: '5. 选目标会预览预计效果；出牌前不扣能量。可点击取消、按 Esc 或右键取消，也可用方向键切换目标。',
+      }),
       el('p', {
         text: '6. 手牌变暗时查看提示，可看到能量不足等原因。手牌右侧按钮用于取消选目标或结束回合。',
       }),
@@ -421,9 +462,15 @@ function helpModal() {
       el('p', {
         text: '9. 阵亡会丢失背包中的战利品；放进保险箱的物品可以保留。消耗卡牌不会恢复。',
       }),
-      el('p', { text: '10. 到达 🌀 撤离法阵后，可确认撤离并把战利品带回安全区。' }),
       el('p', {
-        text: '11. 快捷键：数字键选牌、空格/回车确认、←→ 切目标、Esc/右键取消、N 结束回合。',
+        text: '10. 已探索地图会保存；每片区域都有撤离法阵。越远离世界中心，危险度越高。下次出发可选择使用过的撤离点。',
+      }),
+      el('p', {
+        text: '11. 召唤物会跟随本次行动并在每回合攻击，生命值跨战斗保留；敌人攻击优先随机命中召唤物，溢出的伤害会继续传递。',
+      }),
+      el('p', { text: '12. 到达 🌀 撤离法阵后，可确认撤离并把战利品带回安全区。' }),
+      el('p', {
+        text: '13. 快捷键：数字键选牌、空格/回车确认、←→ 切目标、Esc/右键取消、N 结束回合。',
       }),
     ]),
     btn('知道了', 'primary', closeModal),
@@ -433,5 +480,5 @@ function helpModal() {
 /* ===================== 提示条 ===================== */
 function toastView() {
   if (!ui.toast) return null;
-  return el('div', { class: 'toast', text: ui.toast.text });
+  return el('div', { class: 'toast', text: ui.toast.text, role: 'status', 'aria-live': 'polite' });
 }

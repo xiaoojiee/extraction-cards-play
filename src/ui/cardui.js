@@ -18,6 +18,7 @@ function cardEl(card, opts) {
     opts.disabled ? 'disabled' : '',
     opts.selected ? 'selected' : '',
     opts.playable ? 'playable' : '',
+    card.art ? 'art-' + card.art : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -43,6 +44,7 @@ function cardEl(card, opts) {
         : null,
     },
     [
+      card.art ? el('div', { class: 'card-art-overlay', 'aria-hidden': 'true' }) : null,
       el('div', { class: 'card-head' }, head),
       el('div', { class: 'card-emoji', text: card.emoji }),
       el('div', { class: 'card-name', text: card.name }),
@@ -169,6 +171,10 @@ const CARD_KEYWORDS = [
   '再生',
   '荆棘',
   '眩晕',
+  '召唤',
+  '同化',
+  '小企鹅',
+  '哈气',
   '能量',
   '生命',
   '金币',

@@ -2,7 +2,7 @@
 
 /* DOM 渲染辅助：所有界面都用 el() 生成真实节点，全量重渲染。 */
 
-/* global ui, VIEW_W, VIEW_H, STATUS */
+/* global VIEW_W, VIEW_H, STATUS */
 
 /* 创建元素：el('div', { class:'x', text:'y', onclick: fn }, [child, 'text']) */
 function el(tag, attrs, children) {
@@ -16,11 +16,38 @@ function el(tag, attrs, children) {
       else if (k === 'html') node.innerHTML = v;
       else if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
       else if (k.slice(0, 2) === 'on' && typeof v === 'function') {
-        node.addEventListener(k.slice(2).toLowerCase(), v);
+        node.addEventListener(k.slice(2).toLowerCase(), (event) => {
+          if (
+            node.classList.contains('disabled') ||
+            node.getAttribute('aria-disabled') === 'true'
+          ) {
+            event.preventDefault();
+            return;
+          }
+          v(event);
+        });
       } else node.setAttribute(k, v);
     }
   }
   appendChildren(node, children);
+  /* 卡牌、格子和列表项也可通过键盘操作；战场空白点击区域不充当按钮。 */
+  if (
+    attrs &&
+    typeof attrs.onclick === 'function' &&
+    attrs.role !== 'presentation' &&
+    !['button', 'input', 'select', 'textarea', 'a'].includes(tag.toLowerCase())
+  ) {
+    if (!node.hasAttribute('role')) node.setAttribute('role', 'button');
+    if (!node.hasAttribute('tabindex'))
+      node.tabIndex = node.classList.contains('disabled') ? -1 : 0;
+    if (node.classList.contains('disabled')) node.setAttribute('aria-disabled', 'true');
+    node.addEventListener('keydown', (event) => {
+      if (event.target !== node || !['Enter', ' '].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) node.click();
+    });
+  }
   return node;
 }
 
@@ -47,9 +74,49 @@ function mount(root, node) {
 
 /* 按钮 */
 function btn(label, cls, onClick, extra) {
-  const attrs = { class: 'btn ' + (cls || ''), text: label, onclick: onClick };
+  const attrs = { class: 'btn ' + (cls || ''), type: 'button', text: label, onclick: onClick };
   if (extra) Object.assign(attrs, extra);
+  if (!attrs.onclick || /(^|\s)disabled(\s|$)/.test(attrs.class)) attrs.disabled = true;
   return el('button', attrs);
+}
+
+/* 界面特效拥有自己的生命周期。离开所属界面时统一清理，回调不再触碰下一场战斗。 */
+function createFxScope(isCurrent) {
+  let disposed = false;
+  const timers = new Set();
+  const cleanups = new Set();
+  const scope = {
+    active: () => !disposed && (!isCurrent || isCurrent()),
+    later(callback, delay) {
+      if (!scope.active()) return null;
+      const timer = setTimeout(
+        () => {
+          timers.delete(timer);
+          if (scope.active()) callback();
+        },
+        Math.max(0, delay || 0),
+      );
+      timers.add(timer);
+      return timer;
+    },
+    track(cleanup) {
+      if (!scope.active()) {
+        cleanup();
+        return () => {};
+      }
+      cleanups.add(cleanup);
+      return () => cleanups.delete(cleanup);
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      timers.forEach(clearTimeout);
+      timers.clear();
+      cleanups.forEach((cleanup) => cleanup());
+      cleanups.clear();
+    },
+  };
+  return scope;
 }
 
 /* 进度条；ghost 为「预计将失去的量」，会画成一段红色预告区（选目标时用） */
@@ -73,15 +140,18 @@ function bar(cur, max, cls, ghost) {
 }
 
 /* 漂浮数字（战斗用）：独立图层，不参与全量重渲染 */
-function spawnFloat(text, x, y, cls) {
+function spawnFloat(text, x, y, cls, scope) {
   const layer = document.getElementById('fx-layer');
   if (!layer) return;
   const n = el('div', { class: 'float ' + (cls || ''), text });
   n.style.left = x + 'px';
   n.style.top = y + 'px';
   layer.appendChild(n);
-  setTimeout(() => {
-    if (n.parentNode) n.parentNode.removeChild(n);
+  const untrack = scope ? scope.track(() => n.remove()) : () => {};
+  const later = scope ? scope.later : setTimeout;
+  later(() => {
+    n.remove();
+    untrack();
   }, 900);
 }
 
@@ -131,29 +201,51 @@ function captureFlight(node, start) {
 /* 沿途点依次飞行，最后可做碎裂收尾。 */
 function animateFlight(flight, points, opts) {
   opts = opts || {};
-  if (!flight || !flight.node) return;
+  if (!flight || !flight.node) {
+    if (opts.onFinish) opts.onFinish();
+    return;
+  }
+  const scope = opts.scope;
   const node = flight.node;
   const start = flight.origin;
   const targets = (points || []).filter(Boolean);
+  const later = scope ? scope.later : setTimeout;
+  let finished = false;
+  let animation = null;
+  let untrack = () => {};
+  const active = () => !finished && (!scope || scope.active());
+  const stopAnimation = () => {
+    if (!animation) return;
+    animation.onfinish = null;
+    animation.oncancel = null;
+    animation.cancel();
+    animation = null;
+  };
+  const finish = (cancelled) => {
+    if (finished) return;
+    finished = true;
+    stopAnimation();
+    node.remove();
+    untrack();
+    if (!cancelled && (!scope || scope.active()) && opts.onFinish) opts.onFinish();
+  };
+  if (scope) untrack = scope.track(() => finish(true));
   let previous = start;
   let previousScale = opts.startScale || 1;
   let segment = 0;
   const moveNext = () => {
+    if (!active()) return;
     if (segment >= targets.length) {
       if (opts.shatter) {
-        if (node.getAnimations) node.getAnimations().forEach((animation) => animation.cancel());
+        stopAnimation();
         node.style.left = previous.x - flight.size.width / 2 + 'px';
         node.style.top = previous.y - flight.size.height / 2 + 'px';
         node.style.transform = 'none';
         node.classList.add('fx-shatter');
-        setTimeout(() => {
-          node.remove();
-          if (opts.onFinish) opts.onFinish();
-        }, 300);
+        later(() => finish(false), 300);
         return;
       }
-      node.remove();
-      if (opts.onFinish) opts.onFinish();
+      finish(false);
       return;
     }
     const target = targets[segment++];
@@ -163,55 +255,79 @@ function animateFlight(flight, points, opts) {
     const toY = target.y - start.y;
     const duration = opts.duration || 260;
     const endScale = opts.impactPunch && segment === 1 ? 1.12 : opts.scale || 0.78;
-    const frames = opts.impactPunch && segment === 1
-      ? [
-          { transform: `translate(${fromX}px, ${fromY}px) scale(${previousScale}) rotate(0deg)`, offset: 0 },
-          { transform: `translate(${toX * 0.88}px, ${toY * 0.88}px) scale(0.9) rotate(-5deg)`, offset: 0.72 },
-          { transform: `translate(${toX * 1.04}px, ${toY * 1.04}px) scale(1.18) rotate(5deg)`, offset: 0.9 },
-          { transform: `translate(${toX}px, ${toY}px) scale(${endScale}) rotate(0deg)`, offset: 1 },
-        ]
-      : [
-          { transform: `translate(${fromX}px, ${fromY}px) scale(${previousScale}) rotate(0deg)` },
-          { transform: `translate(${toX}px, ${toY}px) scale(${endScale}) rotate(${opts.rotate || 7}deg)` },
-        ];
+    const frames =
+      opts.impactPunch && segment === 1
+        ? [
+            {
+              transform: `translate(${fromX}px, ${fromY}px) scale(${previousScale}) rotate(0deg)`,
+              offset: 0,
+            },
+            {
+              transform: `translate(${toX * 0.88}px, ${toY * 0.88}px) scale(0.9) rotate(-5deg)`,
+              offset: 0.72,
+            },
+            {
+              transform: `translate(${toX * 1.04}px, ${toY * 1.04}px) scale(1.18) rotate(5deg)`,
+              offset: 0.9,
+            },
+            {
+              transform: `translate(${toX}px, ${toY}px) scale(${endScale}) rotate(0deg)`,
+              offset: 1,
+            },
+          ]
+        : [
+            { transform: `translate(${fromX}px, ${fromY}px) scale(${previousScale}) rotate(0deg)` },
+            {
+              transform: `translate(${toX}px, ${toY}px) scale(${endScale}) rotate(${opts.rotate ?? 7}deg)`,
+            },
+          ];
     const pauseAfter = () => {
       if (opts.pauseAfterSegment !== segment) {
         moveNext();
         return;
       }
       if (opts.pauseClass) node.classList.add(opts.pauseClass);
-      if (opts.onPause) opts.onPause(target);
-      setTimeout(() => {
+      later(() => {
         if (opts.pauseClass) node.classList.remove(opts.pauseClass);
         moveNext();
       }, opts.pauseDuration || 120);
+      if (opts.onPause) opts.onPause(target);
     };
+    let completed = false;
+    const completeSegment = () => {
+      if (completed || !active()) return;
+      completed = true;
+      node.style.transform = frames[frames.length - 1].transform;
+      stopAnimation();
+      previous = target;
+      previousScale = endScale;
+      pauseAfter();
+    };
+    /* WAAPI 被系统取消或不发 finish 时仍能完成演出，不留下永久输入锁。 */
+    later(completeSegment, duration + 100);
     if (node.animate) {
-      const animation = node.animate(
-        frames,
-        {
+      try {
+        animation = node.animate(frames, {
           duration,
-          easing: opts.impactPunch && segment === 1 ? 'cubic-bezier(.28,.05,.52,1.25)' : 'cubic-bezier(.2,.72,.25,1)',
+          easing:
+            opts.impactPunch && segment === 1
+              ? 'cubic-bezier(.28,.05,.52,1.25)'
+              : 'cubic-bezier(.2,.72,.25,1)',
           fill: 'forwards',
-        },
-      );
-      animation.onfinish = () => {
-        previous = target;
-        previousScale = endScale;
-        pauseAfter();
-      };
+        });
+        animation.onfinish = completeSegment;
+        animation.oncancel = completeSegment;
+      } catch {
+        node.style.transform = frames[frames.length - 1].transform;
+        later(completeSegment, duration);
+      }
     } else {
       node.style.transform = `translate(${toX}px, ${toY}px) scale(${endScale})`;
-      setTimeout(() => {
-        previous = target;
-        previousScale = endScale;
-        pauseAfter();
-      }, duration);
+      later(completeSegment, duration);
     }
   };
   if (!targets.length) {
-    node.remove();
-    if (opts.onFinish) opts.onFinish();
+    finish(false);
   } else {
     if (!node.animate && opts.startScale) node.style.transform = `scale(${opts.startScale})`;
     moveNext();
@@ -225,11 +341,12 @@ function statusChips(st, opts) {
     const k = keys[i];
     const v = st[k];
     if (!v) continue;
+    const info = STATUS[k];
     out.push(
       el('span', {
-        class: 'chip' + (opts && opts.bad ? ' chip-bad' : ''),
-        title: k,
-        text: `${statusEmoji(k)}${v}`,
+        class: 'chip' + ((info ? info.bad : opts && opts.bad) ? ' chip-bad' : ''),
+        title: info ? `${info.name}：${info.desc}` : k,
+        text: `${statusEmoji(k)} ${info ? info.name : k} ${v}`,
       }),
     );
   }

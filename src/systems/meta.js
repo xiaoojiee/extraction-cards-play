@@ -2,10 +2,11 @@
 
 /* 安全区：仓库 / 携带卡组 / 商店 / 解锁。改的是 meta（存档）。 */
 
-/* global meta, ui, unlocks, Toy, ZONES, CARDS, POTIONS, RARITY, RNG, clamp,
+/* global meta, ui, run, unlocks, Toy, ZONES, CARDS, POTIONS, RARITY, RNG, clamp,
    starterDeck, cardPrice, cardSellPrice, rollCardId, rollPotionId, saveMeta, loadMeta,
    DECK_MAX, DECK_MIN, POTION_SLOTS, refresh, toast, upgradedId, SMITH_COST,
-   SAFE_SHOP_FUNDS_MIN, SAFE_SHOP_FUNDS_MAX */
+   SAFE_SHOP_FUNDS_MIN, SAFE_SHOP_FUNDS_MAX, SAFE_SHOP_CARDS, SAFE_SHOP_POTIONS,
+   REFRESH_COST, SECURE_COST, SECURE_UPGRADE_MAX, DECK_SLOT_COST, DECK_UPGRADE_MAX, SELL_RATE */
 
 const UNLOCK_HINT = {
   like: '点赞视频解锁',
@@ -13,10 +14,6 @@ const UNLOCK_HINT = {
   fav: '收藏视频解锁',
   follow: '关注UP解锁',
 };
-
-const SAFE_SHOP_CARDS = 5;
-const SAFE_SHOP_POTIONS = 3;
-const REFRESH_COST = 20;
 
 /* ---- 解锁 ---- */
 async function refreshUnlocks() {
@@ -104,6 +101,38 @@ function autoLoadout() {
   return idx.slice(0, deckMax()).map((e) => e.i);
 }
 
+/* 配装与仓库下标一起维护；删除前面的卡不能让选中项悄悄变成另一张。 */
+function normalizeLoadout() {
+  if (!Array.isArray(ui.loadout)) ui.loadout = autoLoadout();
+  ui.loadout = [...new Set(ui.loadout)]
+    .filter(
+      (i) => Number.isInteger(i) && i >= 0 && CARDS[meta.stash[i]] && !CARDS[meta.stash[i]].junk,
+    )
+    .slice(0, deckMax());
+  return ui.loadout;
+}
+
+function toggleLoadout(index) {
+  if (ui.screen !== 'safe' || run) return;
+  const load = normalizeLoadout();
+  const card = CARDS[meta.stash[index]];
+  if (!card || card.junk) return;
+  if (load.includes(index)) ui.loadout = load.filter((i) => i !== index);
+  else if (load.length < deckMax()) ui.loadout.push(index);
+  else toast('携带卡组已满');
+  refresh();
+}
+
+function prepareSafeZone() {
+  ensureStarter();
+  if (!meta.safeShop) refreshSafeShop(false);
+  normalizeLoadout();
+}
+
+function canManageStash() {
+  return ui.screen === 'safe' && !run;
+}
+
 /* ---- 安全区商店 ---- */
 function shopFunds() {
   if (!meta.safeShop) return 0;
@@ -117,6 +146,7 @@ function metaPayout(card) {
 }
 
 function refreshSafeShop(force) {
+  if (force && (!canManageStash() || meta.gold < REFRESH_COST)) return false;
   if (force) meta.gold -= REFRESH_COST;
   const cards = [];
   for (let i = 0; i < SAFE_SHOP_CARDS; i++) {
@@ -130,9 +160,11 @@ function refreshSafeShop(force) {
   }
   meta.safeShop = { cards, potions, funds: RNG.int(SAFE_SHOP_FUNDS_MIN, SAFE_SHOP_FUNDS_MAX) };
   saveMeta();
+  return true;
 }
 
 function safeShopBuyCard(i) {
+  if (!canManageStash()) return;
   const it = meta.safeShop && meta.safeShop.cards[i];
   if (!it || it.sold || meta.gold < it.price) return;
   meta.gold -= it.price;
@@ -143,6 +175,7 @@ function safeShopBuyCard(i) {
   refresh();
 }
 function safeShopBuyPotion(i) {
+  if (!canManageStash()) return;
   const it = meta.safeShop && meta.safeShop.potions[i];
   if (!it || it.sold || meta.gold < it.price) return;
   meta.gold -= it.price;
@@ -153,6 +186,7 @@ function safeShopBuyPotion(i) {
   refresh();
 }
 function safeShopRefresh() {
+  if (!canManageStash()) return;
   if (meta.gold < REFRESH_COST) {
     toast('金币不足');
     return;
@@ -162,15 +196,20 @@ function safeShopRefresh() {
 }
 
 /* 仓库卖卡：商人资金不足就只能拿到他出得起的钱 */
-function metaSellCard(index) {
+function metaSellCard(index, expectedId) {
+  if (!canManageStash() || !Number.isInteger(index) || index < 0) return;
   const id = meta.stash[index];
-  if (!id) return;
+  if (!id || (expectedId && id !== expectedId)) return;
   const { want, pay } = metaPayout(CARDS[id]);
   if (pay < 1) {
     toast('商人现金不足，先买点东西给他回血');
     return;
   }
   meta.stash.splice(index, 1);
+  if (Array.isArray(ui.loadout)) {
+    ui.loadout = ui.loadout.filter((i) => i !== index).map((i) => (i > index ? i - 1 : i));
+  }
+  ensureStarter();
   if (meta.safeShop) meta.safeShop.funds -= pay;
   meta.gold += pay;
   saveMeta();
@@ -179,8 +218,10 @@ function metaSellCard(index) {
 }
 
 /* 安全区铁匠铺：升级仓库里的一张牌（永久） */
-function metaUpgradeCard(index) {
+function metaUpgradeCard(index, expectedId) {
+  if (!canManageStash() || !Number.isInteger(index) || index < 0) return;
   const id = meta.stash[index];
+  if (!id || (expectedId && id !== expectedId)) return;
   const nid = upgradedId(id);
   if (!nid) {
     toast('这张牌无法升级');
@@ -198,9 +239,10 @@ function metaUpgradeCard(index) {
   refresh();
 }
 function metaSellPotion(index) {
+  if (!canManageStash() || !Number.isInteger(index) || index < 0) return;
   const id = meta.potions[index];
   if (!id) return;
-  const want = Math.round(POTIONS[id].price * 0.4);
+  const want = Math.round(POTIONS[id].price * SELL_RATE);
   const pay = Math.min(want, shopFunds());
   if (pay < 1) {
     toast('商人现金不足');
@@ -214,13 +256,13 @@ function metaSellPotion(index) {
 }
 
 /* 保险箱扩容 */
-const SECURE_COST = 180;
 function buySecureSlot() {
+  if (!canManageStash()) return;
   if (meta.gold < SECURE_COST) {
     toast('金币不足');
     return;
   }
-  if (meta.secureSlots >= 3) {
+  if (meta.secureSlots >= SECURE_UPGRADE_MAX) {
     toast('保险箱已满级');
     return;
   }
@@ -231,13 +273,13 @@ function buySecureSlot() {
 }
 
 /* 卡组容量扩容 */
-const DECK_SLOT_COST = 150;
 function buyDeckSlot() {
+  if (!canManageStash()) return;
   if (meta.gold < DECK_SLOT_COST) {
     toast('金币不足');
     return;
   }
-  if (meta.upgrades.deckMax >= 6) {
+  if (meta.upgrades.deckMax >= DECK_UPGRADE_MAX) {
     toast('卡组已满级');
     return;
   }

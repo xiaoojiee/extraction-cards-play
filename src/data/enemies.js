@@ -206,6 +206,95 @@ defEnemy({
   ],
 });
 
+/* 固定双人精英：刘华强负责高压攻击，瓜摊老板负责护甲和自我恢复。 */
+defEnemy({
+  id: 'liu_huaqiang_elite',
+  name: '刘华强',
+  characterId: 'liu_huaqiang_elite',
+  archetype: 'attacker',
+  emoji: '🔪',
+  image: 'assets/卡面/刘华强.png',
+  tier: 'elite',
+  hp: 62,
+  gold: 38,
+  moves: [
+    { label: '试瓜一刀', emoji: '🔪', dmg: 12, w: 35 },
+    { label: '华强劈瓜', emoji: '💥', dmg: 17, w: 30 },
+    { label: '盯紧目标', emoji: '👀', dmg: 7, player: [{ st: 'vuln', v: 1 }], w: 20 },
+    { label: '压迫上前', emoji: '😠', dmg: 9, self: [{ st: 'str', v: 1 }], w: 15 },
+  ],
+});
+defEnemy({
+  id: 'melon_vendor_elite',
+  name: '瓜摊老板',
+  characterId: 'melon_vendor_elite',
+  archetype: 'support',
+  emoji: '🍉',
+  image: 'assets/卡面/瓜摊老板.png',
+  tier: 'elite',
+  hp: 72,
+  gold: 42,
+  moves: [
+    { label: '举摊挡刀', emoji: '🛡️', block: 14, w: 35 },
+    { label: '喘口气', emoji: '💚', heal: 12, block: 6, w: 30 },
+    { label: '护住瓜摊', emoji: '🪵', block: 20, w: 20 },
+    { label: '招呼客人', emoji: '🍵', heal: 8, block: 10, w: 15 },
+  ],
+});
+
+defEnemy({
+  id: 'mao_die',
+  name: '耄耋',
+  characterId: 'mao_die',
+  archetype: 'elite',
+  emoji: '🐈',
+  image: 'assets/卡面/耄耋.png',
+  tier: 'elite',
+  hp: 72,
+  gold: 58,
+  moves: [
+    { label: '猫爪连击', emoji: '🐾', dmg: 6, times: 2, w: 35 },
+    { label: '耄耋凝视', emoji: '👁️', dmg: 8, player: [{ st: 'weak', v: 1 }], w: 25 },
+    { label: '突然发飙', emoji: '😾', dmg: 16, w: 25 },
+    { label: '翻肚皮装乖', emoji: '🐈', block: 12, heal: 8, w: 15 },
+  ],
+});
+
+defEnemy({
+  id: 'big_dog',
+  name: '大狗',
+  characterId: 'big_dog',
+  archetype: 'attacker',
+  emoji: '🐕',
+  image: 'assets/卡面/大狗.png',
+  tier: 'normal',
+  hp: 28,
+  gold: 15,
+  moves: [
+    { label: '扑咬', emoji: '🦷', dmg: 7, w: 40 },
+    { label: '大声吠叫', emoji: '🐕', dmg: 4, player: [{ st: 'weak', v: 1 }], w: 25 },
+    { label: '猛冲撞击', emoji: '💥', dmg: 11, w: 25 },
+    { label: '警惕龇牙', emoji: '🛡️', block: 6, w: 10 },
+  ],
+});
+
+defEnemy({
+  id: 'gugugaga',
+  name: '咕咕嘎嘎',
+  characterId: 'gugugaga',
+  archetype: 'attacker',
+  emoji: '🐧',
+  image: 'assets/卡面/咕咕嘎嘎-香企鹅.png',
+  tier: 'normal',
+  hp: 30,
+  gold: 18,
+  moves: [
+    { label: '企鹅冲撞', emoji: '🐧', dmg: 7, w: 45 },
+    { label: '咕咕齐鸣', emoji: '📣', dmg: 4, times: 2, w: 35 },
+    { label: '抱团防守', emoji: '🛡️', block: 8, w: 20 },
+  ],
+});
+
 defEnemy({
   id: 'collector',
   name: '深渊魔王',
@@ -248,19 +337,15 @@ defEnemy({
   ],
 });
 
-/* 各区域可出的普通敌人（精英/Boss 单独处理） */
-const NORMAL_POOL = [
-  'scavenger',
-  'wild_dog',
-  'patrol',
-  'drone',
-  'mutant',
-  'sniper',
-  'bomber',
-  'raider',
-];
-const ELITE_POOL = ['cleaner', 'abomination', 'marksman'];
-const BOSS_POOL = ['collector', 'watchman'];
+/* 没有角色卡面的旧敌人不再进入内容表；保留带立绘的精英双人组与新增角色。 */
+Object.keys(ENEMIES).forEach((id) => {
+  if (!ENEMIES[id].image) delete ENEMIES[id];
+});
+
+/* 当前有立绘的遭遇池；暂无卡面 Boss，因此先关闭随机 Boss 遭遇。 */
+const NORMAL_POOL = ['big_dog', 'gugugaga'];
+const ELITE_POOL = ['mao_die'];
+const BOSS_POOL = [];
 
 /* ---- 数值成长 ---- */
 function enemyScale(danger, zone) {
@@ -283,7 +368,7 @@ function pickEncounterIds(danger, zone, eliteness) {
 }
 
 function makeEnemy(id, danger, zone) {
-  const def = ENEMIES[id] || ENEMIES.scavenger;
+  const def = ENEMIES[id] || ENEMIES.big_dog;
   const s = enemyScale(danger, zone);
   const hp = Math.max(1, Math.round(def.hp * s.hp));
   return {
@@ -294,6 +379,7 @@ function makeEnemy(id, danger, zone) {
     tier: def.tier,
     characterId: def.characterId || def.id,
     archetype: def.archetype || def.tier,
+    image: def.image || null,
     hp,
     maxHp: hp,
     block: 0,

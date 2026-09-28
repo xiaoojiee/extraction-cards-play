@@ -3,26 +3,30 @@
 /* 安全区界面：仓库 / 出击准备 / 商店 / 排行榜，以及撤离结算界面 */
 
 /* global ui, run:writable, meta, el, btn, bar, cardEl, cardMini, cardMiniRow, potionEl, buffEl,
-   logPanel, topBar, CARDS, POTIONS, RARITY, ZONES, STATUS, deckMax, potionSlots, stashList,
-   autoLoadout, ensureStarter, zoneUnlocked, zoneUnlockHint, safeShopRefresh, safeShopBuyCard,
+   logPanel, topBar, CARDS, POTIONS, RARITY, STATUS, deckMax, potionSlots, stashList,
+   autoLoadout, ensureStarter, safeShopRefresh, safeShopBuyCard,
    safeShopBuyPotion, metaSellCard, metaSellPotion, buySecureSlot, buyDeckSlot, loadRank,
    rankState, startRun, refreshSafeShop, refreshUnlocks, cardText, cardSellPrice,
    DECK_MIN, SECURE_COST, DECK_SLOT_COST, REFRESH_COST, SMITH_COST, refresh, toast,
-   upgradedId, metaUpgradeCard, sortBar, sortCardIds, shopFunds, metaPayout */
+   upgradedId, metaUpgradeCard, sortBar, sortCardIds, shopFunds, metaPayout,
+   toggleLoadout, prepareSafeZone, openSettings, SECURE_UPGRADE_MAX, DECK_UPGRADE_MAX,
+   worldExtracts, worldDangerAt, WORLD_BIOMES */
 
 const TABS = [
-  { key: 'zones', label: '🏕️ 出击' },
+  { key: 'zones', label: '🌍 大世界' },
   { key: 'stash', label: '📦 仓库' },
   { key: 'shop', label: '🏪 商店' },
   { key: 'rank', label: '🏆 排行榜' },
 ];
 
 function safeView() {
-  if (meta.stash.length < DECK_MIN) ensureStarter();
-  if (!meta.safeShop) refreshSafeShop(false);
-  if (!Array.isArray(ui.loadout)) ui.loadout = autoLoadout();
   return el('div', { class: 'screen safe-screen' }, [
-    topBar({ right: btn('📖 帮助', 'ghost', () => openHelp()) }),
+    topBar({
+      right: el('div', { class: 'toolbar-actions' }, [
+        btn('📖 帮助', 'ghost', openHelp),
+        btn('⚙ 设置与存档', 'ghost', openSettings),
+      ]),
+    }),
     el(
       'div',
       { class: 'safe-tabs' },
@@ -55,6 +59,18 @@ function safeBody() {
   return el('div');
 }
 
+/* 根据牌名排序显示时仍保留每一张重复卡自己的仓库下标。 */
+function sortedStashEntries() {
+  const nextIndex = Object.create(null);
+  return sortCardIds(meta.stash)
+    .map((id) => {
+      const index = meta.stash.indexOf(id, nextIndex[id] || 0);
+      nextIndex[id] = index + 1;
+      return { id, index, card: CARDS[id] };
+    })
+    .filter((entry) => entry.index >= 0 && entry.card);
+}
+
 /* ===================== 出击 ===================== */
 function zonesTab() {
   const load = ui.loadout || [];
@@ -62,34 +78,6 @@ function zonesTab() {
   for (let i = 0; i < meta.stash.length; i++) {
     byIndex[i] = { id: meta.stash[i], i, card: CARDS[meta.stash[i]] };
   }
-
-  const zoneCards = Object.keys(ZONES).map((k) => {
-    const z = ZONES[k];
-    const ok = zoneUnlocked(k);
-    return el(
-      'div',
-      {
-        class: 'zone-card' + (ui.zonePick === k ? ' active' : '') + (ok ? '' : ' locked'),
-        onclick: ok
-          ? () => {
-              ui.zonePick = k;
-              refresh();
-            }
-          : null,
-      },
-      [
-        el('div', { class: 'zone-emoji', text: z.emoji }),
-        el('div', { class: 'zone-name', text: z.name }),
-        el('div', { class: 'zone-desc', text: z.desc }),
-        el('div', {
-          class: 'zone-meta',
-          text: `危险度成长 ×${z.dangerMul} · 战利品 ×${z.lootMul}`,
-        }),
-        el('div', { class: 'zone-size', text: `${z.cols} × ${z.rows} 格` }),
-        ok ? null : el('div', { class: 'zone-lock', text: '🔒 ' + zoneUnlockHint(k) }),
-      ],
-    );
-  });
 
   const selected = el(
     'div',
@@ -99,64 +87,44 @@ function zonesTab() {
       if (!e) return null;
       return cardMini(e.card, {
         class: 'loadout-mini',
-        onClick: () => {
-          ui.loadout = load.filter((x) => x !== idx);
-          refresh();
-        },
+        onClick: () => toggleLoadout(idx),
       });
     }),
   );
 
-  const seenIdAt = Object.create(null);
   const available = el(
     'div',
     { class: 'card-grid scroll' },
-    sortCardIds(meta.stash)
-      .map((id) => {
-        const from = seenIdAt[id] || 0;
-        const i = meta.stash.indexOf(id, from);
-        seenIdAt[id] = i + 1;
-        return { id, i, card: CARDS[id] };
-      })
-      .filter((e) => e.i >= 0 && !e.card.junk)
+    sortedStashEntries()
+      .filter((e) => !e.card.junk)
       .map((e) =>
         el('div', { class: 'grid-cell' }, [
           cardEl(e.card, {
-            onClick:
-              load.length >= deckMax()
-                ? null
-                : () => {
-                    ui.loadout = load.concat([e.i]);
-                    refresh();
-                  },
-            disabled: load.includes(e.i),
-            badge: load.includes(e.i) ? '已携带' : '点击加入',
+            onClick: () => toggleLoadout(e.index),
+            disabled: load.length >= deckMax() && !load.includes(e.index),
+            selected: load.includes(e.index),
+            badge: load.includes(e.index) ? '已携带 · 点击移除' : '点击加入',
           }),
         ]),
       ),
   );
 
-  const zoneKey = ui.zonePick || 'suburb';
-  const selectedZone = ZONES[zoneKey];
-  const unlocked = zoneUnlocked(zoneKey);
-  const canStart = load.length >= DECK_MIN && unlocked;
-  const startLabel = !unlocked
-    ? '区域未解锁'
-    : load.length < DECK_MIN
-      ? `还差 ${DECK_MIN - load.length} 张卡`
-      : '🏕️ 出发';
+  const canStart = load.length >= DECK_MIN;
+  const startLabel =
+    load.length < DECK_MIN ? `还差 ${DECK_MIN - load.length} 张卡` : '🌍 进入大世界';
   return el('div', { class: 'zones-layout' }, [
     el('div', { class: 'zones-left' }, [
-      el('div', { class: 'col-title', text: '选择行动区域' }),
-      el('div', { class: 'zone-list' }, zoneCards),
-      selectedZone
-        ? el('div', { class: 'zone-selected-summary' }, [
-            el('strong', { text: selectedZone.name }),
-            el('span', {
-              text: `${selectedZone.cols} × ${selectedZone.rows} 格 · ${selectedZone.desc}`,
-            }),
-          ])
-        : null,
+      el('div', { class: 'col-title', text: '无尽大世界' }),
+      el('div', { class: 'zone-selected-summary' }, [
+        el('strong', { text: '🌍 世界会随着探索持续延伸' }),
+        el('span', {
+          text: '已探索的地图会保存。每片区域都有固定撤离点；离世界中心越远，敌人越强。',
+        }),
+      ]),
+      el('div', {
+        class: 'hint-text',
+        text: '完成配装后选择出生点。成功使用过的撤离点会成为下次出发位置。',
+      }),
     ]),
     el('div', { class: 'zones-right' }, [
       el('div', { class: 'loadout-dock' }, [
@@ -178,12 +146,7 @@ function zonesTab() {
               toast('消耗品会按腰带容量自动带入（' + potionSlots() + ' 格）');
             }),
             btn(startLabel, canStart ? 'primary big' : 'ghost big', () => {
-              if (!canStart) return;
-              const picks = load.map((i) => ({ id: meta.stash[i], stashIndex: i }));
-              startRun(zoneKey, picks);
-              refreshSafeShop(false);
-              ui.loadout = null;
-              refresh();
+              if (canStart) openSpawnChoice();
             }),
           ]),
         ]),
@@ -200,6 +163,133 @@ function zonesTab() {
       el('div', { class: 'col-title', text: '仓库 · 点击卡牌加入携带卡组' }),
       sortBar(),
       available,
+    ]),
+  ]);
+}
+
+/* 点击进入大世界后先选出生点；确认前不扣金币或消耗品。 */
+function openSpawnChoice() {
+  if (run || ui.screen !== 'safe' || (ui.loadout || []).length < DECK_MIN) return;
+  const exits = worldExtracts(meta.worldMap);
+  if (!exits.some((point) => `${point.c},${point.r}` === ui.worldSpawnChoice)) {
+    ui.worldSpawnChoice = 'origin';
+  }
+  ui.screen = 'spawn';
+  refresh();
+}
+
+function confirmSpawnChoice() {
+  if (run || ui.screen !== 'spawn') return;
+  const exits = worldExtracts(meta.worldMap);
+  const selected = exits.find((point) => `${point.c},${point.r}` === ui.worldSpawnChoice);
+  if (ui.worldSpawnChoice !== 'origin' && !selected) {
+    ui.worldSpawnChoice = 'origin';
+    toast('该撤离点已不可用，请重新选择出生点');
+    refresh();
+    return;
+  }
+  const picks = (ui.loadout || []).map((index) => ({ id: meta.stash[index], stashIndex: index }));
+  if (!startRun('world', picks, selected || null)) {
+    ui.screen = 'safe';
+    refresh();
+    return;
+  }
+  refreshSafeShop(false);
+  ui.loadout = null;
+  refresh();
+}
+
+function spawnView() {
+  const exits = worldExtracts(meta.worldMap);
+  const selected = exits.find((point) => `${point.c},${point.r}` === ui.worldSpawnChoice);
+  const chosen = selected || null;
+  const entries = [
+    {
+      key: 'origin',
+      title: '🏕 世界中心',
+      location: '坐标 (0, 0)',
+      environment: '初始营地',
+      danger: 0,
+    },
+    ...exits.map((point) => ({
+      key: `${point.c},${point.r}`,
+      title: '🌀 已使用的撤离点',
+      location: `坐标 (${point.c}, ${point.r})`,
+      environment: (WORLD_BIOMES[point.environment] || {}).name || '野外',
+      danger: worldDangerAt(point.c, point.r),
+    })),
+  ];
+  const selectedEntry = entries.find((entry) => entry.key === ui.worldSpawnChoice) || entries[0];
+  const load = ui.loadout || [];
+  return el('div', { class: 'screen spawn-screen' }, [
+    topBar(),
+    el('div', { class: 'spawn-stage-head' }, [
+      el('div', { class: 'col-title', text: '选择出生点' }),
+      el('div', {
+        class: 'hint-text',
+        text: '已使用过的撤离点可作为新行动的起点。选择后确认出发。',
+      }),
+    ]),
+    el('div', { class: 'spawn-stage-body' }, [
+      el('div', { class: 'spawn-stage-list' }, [
+        el('div', { class: 'spawn-list-title', text: `可用位置 ${entries.length} 处` }),
+        el(
+          'div',
+          { class: 'spawn-stage-options' },
+          entries.map((entry) =>
+            el(
+              'button',
+              {
+                class: 'spawn-stage-option' + (entry.key === selectedEntry.key ? ' active' : ''),
+                type: 'button',
+                'aria-pressed': entry.key === selectedEntry.key ? 'true' : 'false',
+                onclick: () => {
+                  ui.worldSpawnChoice = entry.key;
+                  refresh();
+                },
+              },
+              [
+                el('strong', { text: entry.title }),
+                el('span', { text: `${entry.location} · ${entry.environment}` }),
+                el('span', { class: 'spawn-danger', text: `⚠️ 初始危险度 ${entry.danger}` }),
+              ],
+            ),
+          ),
+        ),
+        !exits.length
+          ? el('div', {
+              class: 'spawn-stage-hint',
+              text: '目前还没有使用过的撤离点。从世界中心出发，成功撤离后即可解锁对应位置。',
+            })
+          : null,
+      ]),
+      el('div', { class: 'spawn-stage-detail' }, [
+        el('div', { class: 'col-title', text: '本次出发' }),
+        el('div', { class: 'spawn-stage-location', text: selectedEntry.title }),
+        el('div', { class: 'spawn-stage-location-sub', text: selectedEntry.location }),
+        el('div', { class: 'spawn-stage-stats' }, [
+          el('div', { text: `🌿 环境：${selectedEntry.environment}` }),
+          el('div', { text: `⚠️ 初始危险度：${selectedEntry.danger}` }),
+          el('div', { text: `🃏 携带卡牌：${load.length} 张` }),
+          el('div', { text: `❤️ 初始生命：${meta.maxHp}` }),
+          el('div', { text: `🧪 携带消耗品：${Math.min(potionSlots(), meta.potions.length)} 件` }),
+        ]),
+        el('div', {
+          class: 'hint-text',
+          text: chosen
+            ? '从该撤离点进入后，可以继续探索或再次选择撤离。'
+            : '从世界中心进入，向周围探索新的地块。',
+        }),
+      ]),
+    ]),
+    el('div', { class: 'spawn-stage-actions' }, [
+      btn('← 返回配装', 'ghost', () => {
+        ui.screen = 'safe';
+        refresh();
+      }),
+      btn('从此处出发 →', 'primary big', confirmSpawnChoice, {
+        disabled: load.length < DECK_MIN,
+      }),
     ]),
   ]);
 }
@@ -254,9 +344,7 @@ function stashTab() {
 function shopTab() {
   const shop = meta.safeShop;
   const funds = shopFunds();
-  const sellList = sortCardIds(meta.stash)
-    .map((id) => ({ id, index: meta.stash.indexOf(id) }))
-    .filter((e) => e.index >= 0);
+  const sellList = sortedStashEntries().filter((e) => e.index >= 0);
   return el('div', { class: 'shop-layout' }, [
     el('div', { class: 'shop-main' }, [
       el('div', {
@@ -319,7 +407,7 @@ function shopTab() {
                 btn(
                   po.pay > 0 ? '卖 +' + po.pay : '商人没钱',
                   'ghost small' + (po.pay > 0 ? '' : ' disabled'),
-                  po.pay > 0 ? () => metaSellCard(e.index) : null,
+                  po.pay > 0 ? () => metaSellCard(e.index, e.id) : null,
                 ),
               ]);
             })
@@ -336,7 +424,7 @@ function shopTab() {
             rows.push(
               el('div', { class: 'sell-row' }, [
                 cardMiniRow(CARDS[meta.stash[i]]),
-                btn('升级', 'ghost small', () => metaUpgradeCard(i)),
+                btn('升级', 'ghost small', () => metaUpgradeCard(i, meta.stash[i])),
               ]),
             );
           }
@@ -347,16 +435,16 @@ function shopTab() {
       el('div', { class: 'upgrade-list' }, [
         upgradeRow(
           '🔒 保险箱扩容',
-          `${meta.secureSlots} / 3（阵亡后保留更多战利品）`,
+          `${meta.secureSlots} / ${SECURE_UPGRADE_MAX}（阵亡后保留更多战利品）`,
           SECURE_COST,
-          meta.secureSlots >= 3,
+          meta.secureSlots >= SECURE_UPGRADE_MAX,
           buySecureSlot,
         ),
         upgradeRow(
           '🃏 卡组容量',
-          `+${meta.upgrades.deckMax || 0} / 6（出发可多带牌）`,
+          `+${meta.upgrades.deckMax || 0} / ${DECK_UPGRADE_MAX}（出发可多带牌）`,
           DECK_SLOT_COST,
-          meta.upgrades.deckMax >= 6,
+          meta.upgrades.deckMax >= DECK_UPGRADE_MAX,
           buyDeckSlot,
         ),
       ]),
@@ -379,7 +467,9 @@ function upgradeRow(name, desc, cost, maxed, fn) {
       el('div', { class: 'up-name', text: name }),
       el('div', { class: 'up-desc', text: desc }),
     ]),
-    btn(maxed ? '已满级' : '🪙 ' + cost, maxed ? 'ghost' : 'primary', fn),
+    btn(maxed ? '已满级' : '🪙 ' + cost, maxed ? 'ghost' : 'primary', fn, {
+      disabled: maxed || meta.gold < cost,
+    }),
   ]);
 }
 
@@ -506,6 +596,7 @@ function resultView() {
         ui.safeTab = 'zones';
         ui.loadout = autoLoadout();
         ui.modal = null;
+        prepareSafeZone();
         refresh();
       }),
     ]),

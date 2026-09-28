@@ -45,7 +45,7 @@ defEvent({
         return `顺利撬开，获得 ${g} 金币。`;
       },
     },
-    { label: '离开', hint: '什么也不做', run: () => '你悄悄退了出去。' },
+    { label: '离开', hint: '什么也不做', leave: true, run: () => '你悄悄退了出去。' },
   ],
 });
 
@@ -85,6 +85,8 @@ defEvent({
     {
       label: '买一张卡（50 金币）',
       hint: '随机卡牌',
+      canChoose: () => runGold() >= 50,
+      disabledHint: '需要 50 金币',
       run() {
         if (runGold() < 50) return '你摸了摸口袋，转身走了。';
         runLoseGold(50);
@@ -95,6 +97,8 @@ defEvent({
     {
       label: '买一瓶消耗品（35 金币）',
       hint: '随机消耗品',
+      canChoose: () => runGold() >= 35,
+      disabledHint: '需要 35 金币',
       run() {
         if (runGold() < 35) return '你摸了摸口袋，转身走了。';
         runLoseGold(35);
@@ -102,7 +106,7 @@ defEvent({
         return `你付了 35 金币，换到「${p.name}」。`;
       },
     },
-    { label: '离开', hint: '不交易', run: () => '你摇了摇头走开了。' },
+    { label: '离开', hint: '不交易', leave: true, run: () => '你摇了摇头走开了。' },
   ],
 });
 
@@ -197,6 +201,8 @@ defEvent({
     {
       label: '救助（20 金币）',
       hint: '获得一张卡与一个 buff',
+      canChoose: () => runGold() >= 20,
+      disabledHint: '需要 20 金币',
       run() {
         if (runGold() < 20) return '你想帮忙，但身上连 20 金币都没有。';
         runLoseGold(20);
@@ -225,6 +231,8 @@ defEvent({
     {
       label: '买一张卡（110 金币）',
       hint: '随机卡牌',
+      canChoose: () => runGold() >= 110,
+      disabledHint: '需要 110 金币',
       run() {
         if (runGold() < 110) return '价格让你望而却步。';
         runLoseGold(110);
@@ -235,6 +243,8 @@ defEvent({
     {
       label: '买 buff（60 金币）',
       hint: '随机增益',
+      canChoose: () => runGold() >= 60,
+      disabledHint: '需要 60 金币',
       run() {
         if (runGold() < 60) return '价格让你望而却步。';
         runLoseGold(60);
@@ -242,7 +252,7 @@ defEvent({
         return `你付了 60 金币，装上「${b.name}」。`;
       },
     },
-    { label: '离开', hint: '不交易', run: () => '你没敢碰这种来路不明的东西。' },
+    { label: '离开', hint: '不交易', leave: true, run: () => '你没敢碰这种来路不明的东西。' },
   ],
 });
 
@@ -271,7 +281,7 @@ defEvent({
         return `池水腥得发苦，你获得了「${b.name}」。`;
       },
     },
-    { label: '离开', hint: '什么也不做', run: () => '你后退两步，离开了神龛。' },
+    { label: '离开', hint: '什么也不做', leave: true, run: () => '你后退两步，离开了神龛。' },
   ],
 });
 
@@ -301,7 +311,7 @@ defEvent({
         return `你抓起「${a.name}」就跑（危险度 +1）。`;
       },
     },
-    { label: '离开', hint: '什么也不做', run: () => '直觉告诉你别进去。' },
+    { label: '离开', hint: '什么也不做', leave: true, run: () => '直觉告诉你别进去。' },
   ],
 });
 
@@ -333,7 +343,7 @@ defEvent({
         return `水面下钻出什么东西咬了你一口（-10 生命），你染上了「${b.name}」。`;
       },
     },
-    { label: '离开', hint: '什么也不做', run: () => '你决定不碰这潭水。' },
+    { label: '离开', hint: '什么也不做', leave: true, run: () => '你决定不碰这潭水。' },
   ],
 });
 

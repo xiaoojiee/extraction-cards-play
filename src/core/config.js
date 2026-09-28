@@ -20,6 +20,28 @@ const REGEN_DECAY = 1; // 再生每回合衰减量
 /* ===================== 玩家 ===================== */
 const START_HP = 70;
 const START_GOLD = 60;
+const RUN_START_GOLD = 25; // 出发时从仓库带入的行动资金上限
+const HAZARD_DAMAGE = 7;
+const BOSS_DEPTH = 8;
+const SCENE_RULES = {
+  ruinGoldChance: 0.35,
+  ruinGoldMin: 5,
+  ruinGoldMax: 18,
+  lootExtraCardChance: 0.35,
+  lootGoldMin: 10,
+  lootGoldMax: 25,
+  buffChoices: 3,
+  hazardDangerDamage: 0.6,
+  eliteCompanionChance: 0.4,
+  bossChance: 0.12,
+  rewardEliteDanger: 3,
+  rewardBossDanger: 6,
+  rewardLootBonusScale: 0.5,
+  rewardRerolls: 8,
+  shopDangerBonus: 2,
+  shopFundsPerDanger: 7,
+  minMaxHp: 12,
+};
 const POTION_SLOTS = 3; // 消耗品腰带
 const SECURE_SLOTS = 2; // 保险箱（阵亡也能带出的战利品格数）
 
@@ -64,7 +86,7 @@ const TILE_ACTION = {
   extract: { label: '撤离', hint: '选择撤离或继续探索。' },
 };
 
-/* 格子出现权重（区域可覆盖）；extract/start 由生成器固定放置 */
+/* 无限世界的地点权重；start 由世界起点固定放置，撤离点稀疏生成 */
 const TILE_WEIGHTS = {
   empty: 16,
   combat: 30,
@@ -76,12 +98,8 @@ const TILE_WEIGHTS = {
   fire: 7,
   event: 7,
   hazard: 4,
+  extract: 1,
 };
-
-/* 重走已处理地点的伏击概率，随危险度小幅增加。 */
-const REVISIT_AMBUSH = 0.04;
-const REVISIT_AMBUSH_PER_DANGER = 0.002;
-const REVISIT_AMBUSH_MAX = 0.12;
 
 /* ===================== 难度（每移动一格 +1 危险度） ===================== */
 const DANGER_HP = 0.1; // 敌人血量成长 /危险度
@@ -172,6 +190,13 @@ const SHOP_FUNDS_MIN = 70;
 const SHOP_FUNDS_MAX = 150;
 const SAFE_SHOP_FUNDS_MIN = 150;
 const SAFE_SHOP_FUNDS_MAX = 320;
+const SAFE_SHOP_CARDS = 5;
+const SAFE_SHOP_POTIONS = 3;
+const REFRESH_COST = 20;
+const SECURE_COST = 180;
+const SECURE_UPGRADE_MAX = 3;
+const DECK_SLOT_COST = 150;
+const DECK_UPGRADE_MAX = 6;
 
 /* ===================== 营地 ===================== */
 const FIRE_HEAL_RATE = 0.35; // 营地休息回复的最大生命比例
@@ -179,7 +204,7 @@ const FIRE_HEAL_RATE = 0.35; // 营地休息回复的最大生命比例
 /* ===================== 状态效果 ===================== */
 const STATUS = {
   str: { name: '力量', emoji: '💪', desc: '每段攻击伤害 +N', bad: false },
-  dex: { name: '敏捷', emoji: '🎯', desc: '每次获得护甲 +N', bad: false },
+  dex: { name: '敏捷', emoji: '🎯', desc: '每层使获得的护甲提高 25%', bad: false },
   vuln: { name: '易伤', emoji: '🎯', desc: '受到的攻击伤害 +50%，回合结束 -1', bad: true },
   weak: { name: '虚弱', emoji: '🥴', desc: '造成的攻击伤害 -25%，回合结束 -1', bad: true },
   poison: { name: '中毒', emoji: '🧪', desc: '回合开始损失 N 生命，然后 N-1', bad: true },
@@ -187,6 +212,18 @@ const STATUS = {
   regen: { name: '再生', emoji: '💚', desc: '回合开始回复 N 生命，然后 N-1', bad: false },
   thorns: { name: '荆棘', emoji: '🌵', desc: '被攻击时反弹 N 伤害', bad: false },
   stun: { name: '眩晕', emoji: '💫', desc: '跳过下一次行动', bad: true },
+  assimilation: {
+    name: '同化',
+    emoji: '🐧',
+    desc: '敌人死亡时，按层数召唤对应生命的小企鹅',
+    bad: true,
+  },
+  contamination: {
+    name: '模因污染',
+    emoji: '🌀',
+    desc: '每次敌人行动开始时，获得相同层数的同化',
+    bad: true,
+  },
 };
 
 /* ===================== B站 / 展示信息 ===================== */

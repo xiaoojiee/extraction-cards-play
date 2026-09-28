@@ -2,35 +2,44 @@
 
 /* 局内结算：撤离、阵亡、保险箱和局内卡牌移除。 */
 
-/* global meta, ui, run:writable, ZONES, TILE, CARDS, POTIONS, BUFFS, EVENTS, RNG, uid, clamp,
-   SAVE_KEY, DECK_MAX, POTION_SLOTS, SECURE_SLOTS, BATTLE_REWARD_CARDS, BATTLE_POTION_CHANCE, ELITE_POTION_CHANCE,
-   BOSS_POTION_CHANCE, DANGER_GOLD, SHOP_CARD_SLOTS, SHOP_POTION_SLOTS, SELL_RATE,
-   SHOP_UPGRADE_COST, FIRE_HEAL_RATE,
-   genMap, tileAt, isAdjacent, revealAround, newEncounter, pickEncounterIds, newBattle,
-   battleResult, aliveEnemies, rollIntent, rollCardId, rollPotionId, rollEventId, rollBuffId,
-   rollBadBuffId, makeBuff, buffTotals, buffDesc, cardSellPrice, cardPrice, saveMeta,
-   POTION_IDS, ENEMIES, BOSS_POOL, ELITE_POOL, NORMAL_POOL, refresh, closeModal, toast, Toy,
-   upgradedId, canUpgradeCard, runTotals, runLog */
+/* global meta, ui, run, SECURE_SLOTS, saveMeta, refresh, toast, Toy,
+   runTotals, runLog, activeScene, tileAt, snapshotWorldMap */
 
 /* ===================== 撤离 ===================== */
 function openExtract() {
+  if (!activeScene('extract') || ui.modal) return;
   const bonus = runTotals().extractBonus || 0;
   ui.modal = { kind: 'extract', bonus };
   refresh();
 }
 function doExtract() {
+  if (!activeScene('extract') || !ui.modal || ui.modal.kind !== 'extract') return;
   const bonus = runTotals().extractBonus || 0;
   run.gold += bonus;
   finishRun(true);
 }
 function resolveDeath(reason) {
+  if (!run || run.mode === 'over' || run.result) return;
   run.deathReason = reason;
   finishRun(false);
 }
 
 /* ===================== 结算 ===================== */
 function finishRun(extracted) {
+  if (!run || run.mode === 'over' || run.result || typeof extracted !== 'boolean') return null;
+  if (extracted && run.pos) {
+    const exit = tileAt(run.map, run.pos.c, run.pos.r);
+    if (exit && exit.type === 'extract') exit.usedExtraction = true;
+  }
+  meta.worldMap = snapshotWorldMap(run.map);
+  /* 先锁定结算，防止旧动画、旧按钮或重复调用再次写入仓库。 */
   run.mode = 'over';
+  run.pendingReward = null;
+  run.battle = null;
+  run.shopStock = null;
+  ui.targeting = null;
+  ui.fxLock = false;
+  ui.modal = null;
   /* 局内升级过的仓库卡写回 */
   for (let i = 0; i < run.upgradedStash.length; i++) {
     const u = run.upgradedStash[i];
@@ -92,6 +101,7 @@ function finishRun(extracted) {
     Toy.submitScore(2, meta.stats.bestDepth);
   }
   refresh();
+  return run.result;
 }
 
 function secureCap() {
@@ -100,6 +110,15 @@ function secureCap() {
 
 /* 放进保险箱 = 收起来保管：阵亡也能带出，但本局就不能再用了 */
 function secureAdd(uidv) {
+  if (
+    !run ||
+    run.mode !== 'map' ||
+    ui.screen !== 'map' ||
+    !ui.modal ||
+    ui.modal.kind !== 'bag' ||
+    run.pendingReward
+  )
+    return;
   const cap = secureCap();
   if (run.secure.length >= cap) {
     toast('保险箱已满');
@@ -115,6 +134,7 @@ function secureAdd(uidv) {
 }
 
 function removeCardFromDeck(uidv) {
+  if (!run || run.mode === 'over') return;
   const idx = run.deck.findIndex((c) => c.uid === uidv);
   if (idx >= 0) run.deck.splice(idx, 1);
 }
