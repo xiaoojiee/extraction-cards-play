@@ -25,7 +25,7 @@
 
 const CARDS = {};
 const SUMMONS = {
-  penguin: { id: 'penguin', name: '小企鹅', emoji: '🐧', image: 'assets/卡面/咕咕嘎嘎-香企鹅.png' },
+  penguin: { id: 'penguin', name: '小企鹅', emoji: '🐧', image: 'assets/卡面/咕咕嘎嘎-香企鹅.webp' },
 };
 function defCard(c) {
   CARDS[c.id] = c;
@@ -161,6 +161,31 @@ const CARD_UPGRADES = {
     ],
   },
   airstrike: { fx: [{ k: 'dmgAll', v: 40 }] },
+
+  /* 召唤流：强化伙伴生存、协同攻击与同化成长。 */
+  gugu: { fx: [{ k: 'summon', id: 'penguin', n: 1, attack: 2, hp: 2 }] },
+  gaga: {
+    fx: [
+      { k: 'summonAttackAll', v: 2 },
+      { k: 'block', v: 5 },
+      { k: 'summonHealAll', v: 2 },
+    ],
+  },
+  gather_penguin: {
+    fx: [
+      { k: 'status', st: 'assimilation', v: 2, target: 'enemy' },
+      { k: 'dmg', v: 5 },
+      { k: 'summonAttack' },
+    ],
+  },
+  gugugaga: { fx: [{ k: 'summon', id: 'penguin', n: 2, attack: 2, hp: 3 }] },
+  meme_contamination: { fx: [{ k: 'assimilationAura', v: 3 }] },
+  penguin_swarm: {
+    fx: [
+      { k: 'summonAttackAll', v: 1 },
+      { k: 'powerPenguinGroup', v: 1 },
+    ],
+  },
   /* 废料不可升级（没有条目） */
 };
 
@@ -898,6 +923,9 @@ function cardText(card) {
         break;
       case 'summonAttackAll':
         parts.push(`所有小企鹅攻击力 +${f.v}`);
+        break;
+      case 'summonHealAll':
+        parts.push(`所有存活召唤物各回复至多 ${f.v} 点生命`);
         break;
       case 'summonAttack':
         parts.push('随机 1 只小企鹅对目标攻击 1 次');

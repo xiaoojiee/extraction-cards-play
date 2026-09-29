@@ -19,7 +19,7 @@ function topBar(opts) {
   const left = el('div', { class: 'top-left' }, [
     el('div', { class: 'hp-wrap' }, [
       el('span', { class: 'hp-emoji', text: '❤️' }),
-      bar(hp, maxHp, 'hp-bar'),
+      bar(hp, maxHp, 'hp-bar', 0, battle ? battle.block : 0),
     ]),
   ]);
   if (run) {

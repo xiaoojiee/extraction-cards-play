@@ -4,8 +4,8 @@
 
 /* global ui, run, el, btn, bar, topBar, logPanel, cardEl, potionEl, statusChips, centerOf,
    captureFlight, animateFlight, createFxScope, spawnFloat, CARDS, POTIONS, STATUS, canPlay, playCard, endTurn, usePotion, battleOver,
-   aliveEnemies, intentText, intentKind, intentLabel, resolveBattle, buffDesc, buffEl, refresh,
-   cardNeedsTarget, fxNeedsTarget, previewAttack, openPileView, cardText, cardCost */
+   aliveEnemies, enemyTurn, intentText, intentKind, intentLabel, resolveBattle, buffDesc, buffEl, refresh,
+   cardNeedsTarget, fxNeedsTarget, previewAttack, openPileView, cardText, cardCost, assetSpriteElement */
 
 /* 每场战斗拥有独立的动作队列、抽牌状态和输入锁，不保存会被 render 替换的界面节点。 */
 let battleFxContext = null;
@@ -22,7 +22,14 @@ function syncBattleFxContext() {
   ui.targeting = null;
   if (!b) return null;
   const scope = createFxScope(() => ui.screen === 'battle' && !!run && run.battle === b);
-  battleFxContext = { battle: b, scope, locks: new Set(), draws: new Set(), settling: false };
+  battleFxContext = {
+    battle: b,
+    scope,
+    locks: new Set(),
+    draws: new Set(),
+    settling: false,
+    deferredEnemyTurn: false,
+  };
   return battleFxContext;
 }
 
@@ -79,6 +86,7 @@ function afterBattleRender() {
   if (!battleFxContext || !battleFxContext.scope.active()) return;
   const b = battleFxContext.battle;
   const duration = flushBattleFx();
+  if (battleFxContext.deferredEnemyTurn) return;
   finishBattleWhenFxDone(b, duration + 40);
 }
 
@@ -86,10 +94,10 @@ function endBattleTurn() {
   const b = run && run.battle;
   if (!canBattleInteract(b)) return;
   ui.targeting = null;
-  endTurn(b);
+  const context = syncBattleFxContext();
+  const deferred = endTurn(b, true);
+  if (deferred && context) context.deferredEnemyTurn = true;
   refresh();
-  const duration = flushBattleFx();
-  finishBattleWhenFxDone(b, duration + 40);
 }
 
 /* 意图图标 */
@@ -131,7 +139,9 @@ function battleView() {
       }),
       el('div', { class: 'battle-field', role: 'presentation', onclick: playSelectedOnBlank }, [
         playerPanel(b),
-        el('div', { class: 'battle-center' + (b.summons.length ? ' has-summons' : '') }, [
+        el('div', {
+          class: 'battle-center' + (b.summons.length || b.summonDeaths.length ? ' has-summons' : ''),
+        }, [
           el(
             'div',
             { class: 'enemies' },
@@ -148,27 +158,47 @@ function battleView() {
 }
 
 function summonRow(b) {
-  if (!b.summons.length) return null;
+  const summons = b.summons.concat(b.summonDeaths || []);
+  if (!summons.length) return null;
   return el('div', { class: 'summon-row' }, [
-    el('div', { class: 'summon-row-label', text: `🐧 企鹅伙伴 ${b.summons.length}` }),
+    el('div', {
+      class: 'summon-row-label',
+      text: b.summons.length
+        ? `🐧 召唤物 ${b.summons.length} · 结束回合后攻击`
+        : '☠ 召唤物阵亡',
+    }),
     el(
       'div',
       { class: 'summon-list' },
-      b.summons.map((summon) =>
+      summons.map((summon) =>
         el(
           'div',
           {
-            class: 'summon-unit',
+            class: 'summon-unit summon-card',
             id: 'summon-' + summon.uid,
-            title: `${summon.name}：${summon.attack} 攻 / ${summon.hp} 血；跟随本次行动，死亡后消失`,
+            title:
+              summon.hp <= 0
+                ? `${summon.name}已阵亡`
+                : `${summon.name}：${summon.attack} 攻 / ${summon.hp} 血；跟随本次行动，死亡后消失`,
           },
           [
-            el('span', { class: 'summon-icon', text: summon.emoji }),
-            el('span', { class: 'summon-name', text: summon.name }),
-            el('span', {
-              class: 'summon-stats',
-              text: `⚔ ${summon.attack} · ❤️ ${summon.hp}/${summon.maxHp}`,
-            }),
+            el('div', { class: 'summon-card-art' }, [
+              summon.image
+                ? assetSpriteElement(summon.image, '', null, 'character')
+                : null,
+              el('span', { class: 'summon-icon', text: summon.emoji }),
+            ]),
+            el('span', { class: 'summon-card-attack', text: '⚔ ' + summon.attack }),
+            el('span', { class: 'summon-card-name', text: summon.name }),
+            el('div', { class: 'summon-card-health' }, [
+              el('div', {
+                class: 'summon-card-health-fill',
+                style: {
+                  width: Math.max(0, Math.min(100, (summon.hp / summon.maxHp) * 100)) + '%',
+                },
+              }),
+              el('span', { text: `❤️ ${summon.hp}/${summon.maxHp}` }),
+            ]),
           ],
         ),
       ),
@@ -231,7 +261,7 @@ function enemyEl(e, i) {
     kids.push(el('div', { class: 'enemy-intent-name', text: '下回合：' + e.intent.label }));
   }
   if (e.image && !dead)
-    kids.push(el('img', { class: 'enemy-portrait', src: e.image, alt: e.name }));
+    kids.push(assetSpriteElement(e.image, 'enemy-portrait', e.name, 'character'));
   else kids.push(el('div', { class: 'enemy-emoji', text: dead ? '💀' : e.emoji }));
   kids.push(el('div', { class: 'enemy-name', text: e.name }));
   if (e.archetype) {
@@ -254,7 +284,7 @@ function enemyEl(e, i) {
     }
   }
 
-  kids.push(bar(e.hp, e.maxHp, 'enemy-hp', ghost));
+  kids.push(bar(e.hp, e.maxHp, 'enemy-hp', ghost, dead ? 0 : e.block));
   if (e.block > 0) kids.push(el('div', { class: 'enemy-block', text: '🛡 ' + e.block }));
   kids.push(statusChips(e.st, { bad: true }));
   if (ptr) {
@@ -296,7 +326,7 @@ function playerPanel(b) {
   return el('div', { class: 'player-panel', id: 'player-panel' }, [
     el('div', { class: 'player-name', text: '玩家状态' }),
     el('div', { class: 'player-stats' }, [
-      bar(b.hp, b.maxHp, 'hp-bar'),
+      bar(b.hp, b.maxHp, 'hp-bar', 0, b.block),
       el('div', { class: 'row' }, [
         el('span', {
           class: 'block-chip',
@@ -868,6 +898,49 @@ function animateEnemyAttack(event, context) {
   }, 230);
 }
 
+function animateSummonAttack(event, context) {
+  if (!context || !context.scope.active()) return;
+  const summon = document.getElementById('summon-' + event.uid);
+  const enemy = document.getElementById('enemy-' + event.index);
+  if (!summon || !enemy) return;
+  const flight = captureFlight(summon);
+  if (!flight) {
+    pulseBattleNode(enemy, 'enemy-hit', context);
+    return;
+  }
+  pulseBattleNode(summon, 'summon-launch', context);
+  animateFlight(flight, [centerOf(enemy), centerOf(summon)], {
+    scope: context.scope,
+    duration: 190,
+    scale: 1,
+    pauseAfterSegment: 1,
+    pauseDuration: 70,
+    impactPunch: true,
+    pauseClass: 'fx-impact-hold',
+    onPause: () => {
+      pulseBattleNode(enemy, 'enemy-hit', context);
+      spawnImpactBurst(enemy);
+    },
+  });
+}
+
+function animateSummonDeath(event, context) {
+  if (!context || !context.scope.active()) return;
+  const summon = document.getElementById('summon-' + event.uid);
+  if (!summon) return;
+  const pos = centerOf(summon);
+  summon.classList.add('summon-dying');
+  spawnFloat('☠', pos.x - 12, pos.y - 14, 'float-die', context.scope);
+  context.scope.later(() => {
+    const deaths = context.battle.summonDeaths || [];
+    const index = deaths.findIndex((entry) => entry.uid === event.uid);
+    if (index >= 0) {
+      deaths.splice(index, 1);
+      refresh();
+    }
+  }, 700);
+}
+
 /* 把本回合发生的事件变成飘字和动作效果，读完后清空事件队列。 */
 function flushBattleFx(initialDelay) {
   const context = battleFxContext;
@@ -903,12 +976,30 @@ function flushBattleFx(initialDelay) {
       continue;
     }
     if (ev.kind === 'summon-attack') {
+      context.scope.later(() => animateSummonAttack(ev, context), cursor);
+      visualEnd = Math.max(visualEnd, cursor + 520);
+      /* 预留冲撞、命中停顿和回位时间，再播放后续召唤物或敌人动作。 */
+      cursor += 480;
+      continue;
+    }
+    if (ev.kind === 'summon-phase-end') {
       context.scope.later(() => {
-        pulseBattleNode('#summon-' + ev.uid, 'summon-attacking', context);
-        pulseBattleNode('#enemy-' + ev.index, 'enemy-hit', context);
+        if (context !== battleFxContext || !context.scope.active()) return;
+        context.deferredEnemyTurn = false;
+        if (battleOver(b)) {
+          finishBattleWhenFxDone(b, 0);
+          return;
+        }
+        enemyTurn(b);
+        refresh();
       }, cursor);
-      visualEnd = Math.max(visualEnd, cursor + 380);
-      cursor += 150;
+      visualEnd = Math.max(visualEnd, cursor + 40);
+      continue;
+    }
+    if (ev.kind === 'summon-die') {
+      const delay = cursor + 80;
+      context.scope.later(() => animateSummonDeath(ev, context), delay);
+      visualEnd = Math.max(visualEnd, delay + 700);
       continue;
     }
     const selector =
@@ -922,6 +1013,7 @@ function flushBattleFx(initialDelay) {
         const node = document.querySelector(selector);
         const pos = centerOf(node);
         pulseBattleNode(selector, 'shield-impact', context);
+        pulseBattleNode(node && node.querySelector('.bar'), 'shield-bar-impact', context);
         spawnFloat('🛡 ' + ev.text, pos.x - 28, pos.y - 10, 'float-block', context.scope);
       }, cursor);
       visualEnd = Math.max(visualEnd, cursor + 520);
@@ -930,6 +1022,7 @@ function flushBattleFx(initialDelay) {
         const node = document.querySelector(selector);
         const pos = centerOf(node);
         pulseBattleNode(selector, 'shield-impact', context);
+        pulseBattleNode(node && node.querySelector('.bar'), 'shield-bar-impact', context);
         spawnFloat('🛡 ' + ev.text, pos.x - 28, pos.y - 10, 'float-block', context.scope);
       }, cursor);
       visualEnd = Math.max(visualEnd, cursor + 520);

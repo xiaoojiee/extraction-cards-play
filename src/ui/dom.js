@@ -120,12 +120,25 @@ function createFxScope(isCurrent) {
 }
 
 /* 进度条；ghost 为「预计将失去的量」，会画成一段红色预告区（选目标时用） */
-function bar(cur, max, cls, ghost) {
-  const r = max > 0 ? Math.max(0, Math.min(1, cur / max)) : 0;
+function bar(cur, max, cls, ghost, shield) {
+  cur = Math.max(0, cur || 0);
+  max = Math.max(0, max || 0);
+  shield = Math.max(0, shield || 0);
+  /* 护甲作为生命条后的蓝色延伸段；超出最大生命的护甲会扩展总刻度，避免被裁掉。 */
+  const scale = Math.max(max, cur + shield, 1);
+  const r = Math.max(0, Math.min(1, cur / scale));
   const kids = [el('div', { class: 'bar-fill', style: { width: r * 100 + '%' } })];
+  if (shield > 0) {
+    kids.push(
+      el('div', {
+        class: 'bar-shield-fill',
+        style: { left: r * 100 + '%', width: (shield / scale) * 100 + '%' },
+      }),
+    );
+  }
   if (ghost > 0) {
     const left = Math.max(0, cur - ghost);
-    const rl = max > 0 ? Math.max(0, Math.min(1, left / max)) : 0;
+    const rl = Math.max(0, Math.min(1, left / scale));
     const g = el('div', {
       class: 'bar-ghost',
       style: { left: rl * 100 + '%', width: (r - rl) * 100 + '%' },
@@ -136,7 +149,10 @@ function bar(cur, max, cls, ghost) {
   kids.push(
     el('span', { class: 'bar-text', text: `${Math.max(0, Math.round(cur))} / ${Math.round(max)}` }),
   );
-  return el('div', { class: 'bar ' + (cls || '') }, kids);
+  return el('div', {
+    class: 'bar ' + (cls || '') + (shield > 0 ? ' has-shield' : ''),
+    title: shield > 0 ? `生命 ${Math.round(cur)} / ${Math.round(max)} · 护甲 ${Math.round(shield)}` : null,
+  }, kids);
 }
 
 /* 漂浮数字（战斗用）：独立图层，不参与全量重渲染 */

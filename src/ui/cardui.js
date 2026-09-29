@@ -3,12 +3,39 @@
 /* 卡牌 / 消耗品 / buff 的 DOM 组件 */
 
 /* global el, ui, CARDS, POTIONS, RARITY, STATUS, CARD_TYPE_NAME, cardText, potionText, buffDesc,
-   buffScopeText, cardSellPrice, refresh */
+   buffScopeText, cardSellPrice, refresh, assetSpriteElement */
 
 const TYPE_CLASS = { attack: 't-attack', skill: 't-skill', power: 't-power' };
+const BASIC_CARD_ART = {
+  strike: 'basic-attack',
+  crowbar: 'basic-attack',
+  defend: 'basic-defend',
+  bandage: 'basic-heal',
+  viral_reply: 'attack-draw',
+  firewall_breach: 'armor-break',
+  cache_shield: 'enhanced-defense',
+  algorithm_boost: 'defense-stance',
+};
+const CARD_ART_ASSET = {
+  'liu-huaqiang': 'assets/卡面/刘华强.webp',
+  'melon-vendor': 'assets/卡面/瓜摊老板.webp',
+  'mao-die': 'assets/卡面/耄耋.webp',
+  'big-dog': 'assets/卡面/大狗.webp',
+  'gugugaga-scent': 'assets/卡面/咕咕嘎嘎-香企鹅.webp',
+  'gugugaga-gather': 'assets/卡面/咕咕嘎嘎-凑企鹅.webp',
+  'basic-attack': 'assets/cards/basic_attack_art.webp',
+  'basic-defend': 'assets/cards/basic_defend_art.webp',
+  'basic-heal': 'assets/cards/basic_heal_art.webp',
+  'attack-draw': 'assets/cards/attack_draw_art.webp',
+  'armor-break': 'assets/cards/armor_break_attack_art.webp',
+  'enhanced-defense': 'assets/cards/enhanced_defense_art.webp',
+  'defense-stance': 'assets/cards/defense_stance_art.webp',
+};
 
 function cardEl(card, opts) {
   opts = opts || {};
+  const art = card.art || BASIC_CARD_ART[card.id] || BASIC_CARD_ART[card.base];
+  const artAsset = CARD_ART_ASSET[art];
   const cls = [
     'card',
     'r-' + card.rarity,
@@ -18,7 +45,7 @@ function cardEl(card, opts) {
     opts.disabled ? 'disabled' : '',
     opts.selected ? 'selected' : '',
     opts.playable ? 'playable' : '',
-    card.art ? 'art-' + card.art : '',
+    art ? 'art-' + art : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -44,7 +71,7 @@ function cardEl(card, opts) {
         : null,
     },
     [
-      card.art ? el('div', { class: 'card-art-overlay', 'aria-hidden': 'true' }) : null,
+      artAsset ? assetSpriteElement(artAsset, 'card-art-overlay', null, 'card') : null,
       el('div', { class: 'card-head' }, head),
       el('div', { class: 'card-emoji', text: card.emoji }),
       el('div', { class: 'card-name', text: card.name }),

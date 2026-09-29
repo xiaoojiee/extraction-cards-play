@@ -15,7 +15,9 @@
    startRun, autoLoadout, endTurn, pickCard, canPlay, battleOver, resolveBattle, VIEW_W, VIEW_H,
    Toy, addLog, cancelTargeting, confirmTarget, moveTargetCursor, flushBattleFx,
    finishBattleWhenFxDone, closeModal, prepareSafeZone, syncBattleFxContext,
-   afterBattleRender, endBattleTurn, validateGameContent, saveState */
+   afterBattleRender, endBattleTurn, validateGameContent, saveState, ENEMIES, SUMMONS,
+   WORLD_TILE_IMAGE, WORLD_TERRAIN_IMAGE, WORLD_BLOCKED_IMAGE, WORLD_FEATURE_IMAGE,
+   WORLD_PLAYER_IMAGE, WORLD_SUMMON_IMAGE */
 
 /* ===================== 舞台缩放 ===================== */
 function fitStage() {
@@ -94,6 +96,314 @@ function loadingView() {
     el('div', { class: 'loading-title', text: '撤离区' }),
     el('div', { class: 'loading-sub', text: '正在准备出发…' }),
   ]);
+}
+
+let textureImageCache = Object.create(null);
+
+/* 运行时只加载五张分类图集；源图路径映射到图集单元，便于 UI 继续按资源名取图。 */
+const TEXTURE_ATLASES = {
+  'assets/atlases/cards.webp': { cols: 4, rows: 4, cellWidth: 320, cellHeight: 426 },
+  'assets/atlases/characters.webp': { cols: 4, rows: 2, cellWidth: 192, cellHeight: 192 },
+  'assets/atlases/terrain.webp': { cols: 5, rows: 1, cellWidth: 256, cellHeight: 256 },
+  'assets/atlases/map-icons.webp': { cols: 4, rows: 4, cellWidth: 128, cellHeight: 128 },
+  'assets/atlases/obstacles.webp': { cols: 4, rows: 2, cellWidth: 256, cellHeight: 256 },
+};
+const TEXTURE_SPRITES = {
+  'assets/cards/basic_attack_art.webp': { atlas: 'assets/atlases/cards.webp', col: 0, row: 0 },
+  'assets/cards/basic_defend_art.webp': { atlas: 'assets/atlases/cards.webp', col: 1, row: 0 },
+  'assets/cards/basic_heal_art.webp': { atlas: 'assets/atlases/cards.webp', col: 2, row: 0 },
+  'assets/cards/attack_draw_art.webp': { atlas: 'assets/atlases/cards.webp', col: 3, row: 0 },
+  'assets/cards/armor_break_attack_art.webp': {
+    atlas: 'assets/atlases/cards.webp',
+    col: 0,
+    row: 1,
+  },
+  'assets/cards/enhanced_defense_art.webp': {
+    atlas: 'assets/atlases/cards.webp',
+    col: 1,
+    row: 1,
+  },
+  'assets/cards/defense_stance_art.webp': { atlas: 'assets/atlases/cards.webp', col: 2, row: 1 },
+  'assets/卡面/刘华强.webp': {
+    card: { atlas: 'assets/atlases/cards.webp', col: 3, row: 1 },
+    character: { atlas: 'assets/atlases/characters.webp', col: 0, row: 0 },
+  },
+  'assets/卡面/瓜摊老板.webp': {
+    card: { atlas: 'assets/atlases/cards.webp', col: 0, row: 2 },
+    character: { atlas: 'assets/atlases/characters.webp', col: 1, row: 0 },
+  },
+  'assets/卡面/耄耋.webp': {
+    card: { atlas: 'assets/atlases/cards.webp', col: 1, row: 2 },
+    character: { atlas: 'assets/atlases/characters.webp', col: 2, row: 0 },
+  },
+  'assets/卡面/大狗.webp': {
+    card: { atlas: 'assets/atlases/cards.webp', col: 2, row: 2 },
+    character: { atlas: 'assets/atlases/characters.webp', col: 3, row: 0 },
+  },
+  'assets/卡面/咕咕嘎嘎-香企鹅.webp': {
+    card: { atlas: 'assets/atlases/cards.webp', col: 3, row: 2 },
+    character: { atlas: 'assets/atlases/characters.webp', col: 0, row: 1 },
+  },
+  'assets/卡面/咕咕嘎嘎-凑企鹅.webp': {
+    card: { atlas: 'assets/atlases/cards.webp', col: 0, row: 3 },
+    character: { atlas: 'assets/atlases/characters.webp', col: 1, row: 1 },
+  },
+  'assets/world/terrain_forest.webp': {
+    atlas: 'assets/atlases/terrain.webp',
+    col: 0,
+    row: 0,
+    terrain: true,
+  },
+  'assets/world/terrain_volcanic_waste.webp': {
+    atlas: 'assets/atlases/terrain.webp',
+    col: 1,
+    row: 0,
+    terrain: true,
+  },
+  'assets/world/terrain_snowmountain.webp': {
+    atlas: 'assets/atlases/terrain.webp',
+    col: 2,
+    row: 0,
+    terrain: true,
+  },
+  'assets/world/terrain_swamp.webp': {
+    atlas: 'assets/atlases/terrain.webp',
+    col: 3,
+    row: 0,
+    terrain: true,
+  },
+  'assets/world/terrain_ruins.webp': {
+    atlas: 'assets/atlases/terrain.webp',
+    col: 4,
+    row: 0,
+    terrain: true,
+  },
+  'assets/world/icons/camp_spawn.webp': { atlas: 'assets/atlases/map-icons.webp', col: 0, row: 0 },
+  'assets/world/icons/extraction_point.webp': {
+    atlas: 'assets/atlases/map-icons.webp',
+    col: 1,
+    row: 0,
+  },
+  'assets/world/icons/combat.webp': { atlas: 'assets/atlases/map-icons.webp', col: 2, row: 0 },
+  'assets/world/icons/elite_combat.webp': {
+    atlas: 'assets/atlases/map-icons.webp',
+    col: 3,
+    row: 0,
+  },
+  'assets/world/icons/loot_chest.webp': { atlas: 'assets/atlases/map-icons.webp', col: 0, row: 1 },
+  'assets/world/icons/potion_cache.webp': {
+    atlas: 'assets/atlases/map-icons.webp',
+    col: 1,
+    row: 1,
+  },
+  'assets/world/icons/rune_stone.webp': { atlas: 'assets/atlases/map-icons.webp', col: 2, row: 1 },
+  'assets/world/icons/merchant_tent.webp': {
+    atlas: 'assets/atlases/map-icons.webp',
+    col: 3,
+    row: 1,
+  },
+  'assets/world/icons/campfire.webp': { atlas: 'assets/atlases/map-icons.webp', col: 0, row: 2 },
+  'assets/world/icons/random_event.webp': {
+    atlas: 'assets/atlases/map-icons.webp',
+    col: 1,
+    row: 2,
+  },
+  'assets/world/icons/danger_zone.webp': {
+    atlas: 'assets/atlases/map-icons.webp',
+    col: 2,
+    row: 2,
+  },
+  'assets/world/icons/player_marker.webp': {
+    atlas: 'assets/atlases/map-icons.webp',
+    col: 3,
+    row: 2,
+  },
+  'assets/world/icons/penguin_summon.webp': {
+    atlas: 'assets/atlases/map-icons.webp',
+    col: 0,
+    row: 3,
+  },
+  'assets/world/obstacles/snow_ridge_wall.webp': {
+    atlas: 'assets/atlases/obstacles.webp',
+    col: 0,
+    row: 0,
+  },
+  'assets/world/obstacles/obsidian_wall.webp': {
+    atlas: 'assets/atlases/obstacles.webp',
+    col: 1,
+    row: 0,
+  },
+  'assets/world/obstacles/forest_wall.webp': {
+    atlas: 'assets/atlases/obstacles.webp',
+    col: 2,
+    row: 0,
+  },
+  'assets/world/obstacles/ruin_wall.webp': {
+    atlas: 'assets/atlases/obstacles.webp',
+    col: 3,
+    row: 0,
+  },
+  'assets/world/obstacles/swamp_mudpit.webp': {
+    atlas: 'assets/atlases/obstacles.webp',
+    col: 0,
+    row: 1,
+  },
+  'assets/world/obstacles/lava_fissure.webp': {
+    atlas: 'assets/atlases/obstacles.webp',
+    col: 1,
+    row: 1,
+  },
+  'assets/world/obstacles/blizzard_marker.webp': {
+    atlas: 'assets/atlases/obstacles.webp',
+    col: 2,
+    row: 1,
+  },
+};
+
+function assetSpriteStyle(path, mode) {
+  const entry = TEXTURE_SPRITES[path];
+  const sprite = entry && ((mode && entry[mode]) || entry.default || entry.character || entry);
+  if (!sprite || sprite.terrain) return null;
+  const atlas = TEXTURE_ATLASES[sprite.atlas];
+  if (!atlas) return null;
+  const x = atlas.cols > 1 ? (sprite.col / (atlas.cols - 1)) * 100 : 0;
+  const y = atlas.rows > 1 ? (sprite.row / (atlas.rows - 1)) * 100 : 0;
+  return {
+    backgroundImage: `url("${sprite.atlas}")`,
+    backgroundPosition: `${x}% ${y}%`,
+    backgroundRepeat: 'no-repeat',
+    backgroundSize: `${atlas.cols * 100}% ${atlas.rows * 100}%`,
+  };
+}
+
+function assetSpriteElement(path, className, alt, mode) {
+  const style = assetSpriteStyle(path, mode);
+  if (!style) {
+    return el('img', {
+      class: className || '',
+      src: path,
+      alt: alt || '',
+      draggable: 'false',
+      loading: 'lazy',
+      decoding: 'async',
+    });
+  }
+  const attrs = {
+    class: [className, 'atlas-sprite'].filter(Boolean).join(' '),
+    style,
+  };
+  if (alt) {
+    attrs.role = 'img';
+    attrs['aria-label'] = alt;
+  } else {
+    attrs['aria-hidden'] = 'true';
+  }
+  return el('span', attrs);
+}
+
+function registerTerrainTextureSprites() {
+  Object.entries(TEXTURE_SPRITES).forEach(([sourcePath, sprite]) => {
+    if (!sprite.terrain) return;
+    const atlas = TEXTURE_ATLASES[sprite.atlas];
+    const image = textureImageCache[sprite.atlas];
+    if (!atlas || !image) throw new Error('地表图集缺少贴图：' + sprite.atlas);
+    const canvas = document.createElement('canvas');
+    canvas.width = atlas.cellWidth;
+    canvas.height = atlas.cellHeight;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('无法创建地表贴图画布');
+    context.drawImage(
+      image,
+      sprite.col * atlas.cellWidth,
+      sprite.row * atlas.cellHeight,
+      atlas.cellWidth,
+      atlas.cellHeight,
+      0,
+      0,
+      atlas.cellWidth,
+      atlas.cellHeight,
+    );
+    textureImageCache[sourcePath] = canvas;
+  });
+}
+
+function gameTexturePaths() {
+  return Object.keys(TEXTURE_ATLASES);
+}
+
+function renderTextureLoading(root, loaded, total, failedPath) {
+  const percent = total ? Math.round((loaded / total) * 100) : 100;
+  root.replaceChildren(
+    el('div', { class: 'screen loading-screen texture-loading-screen' }, [
+      el('div', { class: 'loading-emoji', text: '🎒' }),
+      el('div', { class: 'loading-title', text: '正在加载贴图' }),
+      el('div', {
+        class: 'loading-sub',
+        text: failedPath ? '有贴图没有加载成功，请检查网络后重试。' : '贴图加载完成后进入游戏…',
+      }),
+      el('div', { class: 'texture-progress-track', 'aria-label': '贴图加载进度' }, [
+        el('div', {
+          class: 'texture-progress-fill',
+          style: { width: percent + '%' },
+        }),
+      ]),
+      el('div', {
+        class: 'texture-progress-count',
+        text: failedPath ? '加载失败：' + failedPath : `${loaded} / ${total} 张贴图`,
+      }),
+      failedPath ? btn('重试加载', 'primary', boot) : null,
+    ]),
+  );
+  fitStage();
+}
+
+function loadTextureImage(path) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.decoding = 'async';
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      const decoded = typeof image.decode === 'function' ? image.decode() : Promise.resolve();
+      decoded.then(() => resolve(image)).catch(() => reject(new Error(path)));
+    };
+    image.onload = finish;
+    image.onerror = () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(path));
+    };
+    image.src = path;
+    if (image.complete && image.naturalWidth > 0) finish();
+  });
+}
+
+function preloadGameTextures(root) {
+  const paths = gameTexturePaths();
+  let loaded = 0;
+  let failed = false;
+  textureImageCache = Object.create(null);
+  renderTextureLoading(root, loaded, paths.length);
+  return Promise.all(
+    paths.map((path) =>
+      loadTextureImage(path).then((image) => {
+        textureImageCache[path] = image;
+        loaded += 1;
+        if (!failed) renderTextureLoading(root, loaded, paths.length);
+      }).catch((error) => {
+        failed = true;
+        throw error;
+      }),
+    ),
+  ).then(registerTerrainTextureSprites);
+}
+
+function showTextureLoadError(root, error) {
+  const path = error && error.message ? error.message : String(error);
+  const paths = gameTexturePaths();
+  const loaded = paths.filter((texturePath) => textureImageCache[texturePath]).length;
+  renderTextureLoading(root, loaded, paths.length, path);
 }
 
 function showBootError(root, error) {
@@ -256,7 +566,7 @@ window.addEventListener('contextmenu', (e) => {
 });
 
 /* ===================== 启动 ===================== */
-function boot() {
+function initializeGame() {
   try {
     const contentErrors = validateGameContent();
     if (contentErrors.length) {
@@ -285,6 +595,15 @@ function boot() {
   } catch (error) {
     showBootError(document.getElementById('screen'), error);
   }
+}
+
+function boot() {
+  const root = document.getElementById('screen');
+  if (!root) return;
+  fitStage();
+  preloadGameTextures(root)
+    .then(initializeGame)
+    .catch((error) => showTextureLoadError(root, error));
 }
 
 window.addEventListener('beforeunload', (e) => {

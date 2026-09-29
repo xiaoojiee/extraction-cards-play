@@ -34,6 +34,7 @@ function newBattle(opts) {
     environment: opts.environment || null,
     enemies: opts.enemies,
     summons: opts.summons || [], // 与 run 共用数组；伤亡和强化在大世界中保留
+    summonDeaths: [], // 仅保留阵亡卡牌用于播放本场战斗的死亡动画
     draw: RNG.shuffle(opts.deck.slice()),
     hand: [],
     discard: [],
@@ -111,7 +112,8 @@ function summonTurn(b) {
     if (battleOver(b)) return;
     const living = aliveEnemies(b);
     if (!living.length) return;
-    const enemy = RNG.pick(living);
+    const focused = b.enemies[b.target];
+    const enemy = focused && focused.hp > 0 ? focused : RNG.pick(living);
     summonStrike(b, summon, b.enemies.indexOf(enemy));
   }
 }
@@ -131,6 +133,7 @@ function hitParty(b, amount, enemyIndex) {
     b.log.push(`🐧 ${summon.name}承受 ${dealt} 点伤害`);
     b.events.push({ kind: 'dmg', text: '-' + dealt, side: 'summon', uid: summon.uid });
     if (summon.hp <= 0) {
+      b.summonDeaths.push({ ...summon });
       b.summons.splice(b.summons.indexOf(summon), 1);
       b.log.push(`☠️ ${summon.name}倒下，已从本次行动移除`);
       b.events.push({ kind: 'summon-die', text: '☠️', side: 'summon', uid: summon.uid });
@@ -383,7 +386,7 @@ function drawCards(b, n) {
 }
 
 /* 结束玩家回合 → 敌人行动 → 新回合 */
-function endTurn(b) {
+function endTurn(b, deferEnemyTurn) {
   if (!b || b.phase !== 'player') return;
   /* 灼烧 / 手牌丢弃 */
   if (b.st.burn) {
@@ -415,8 +418,13 @@ function endTurn(b) {
   }
   /* 弃手牌 */
   while (b.hand.length) b.discard.push(b.hand.pop());
+  b.phase = 'enemy';
   summonTurn(b);
   if (battleOver(b)) return;
+  if (deferEnemyTurn && livingSummons(b).length) {
+    b.events.push({ kind: 'summon-phase-end' });
+    return true;
+  }
   enemyTurn(b);
 }
 
@@ -808,6 +816,23 @@ function applyFx(b, fx, target, allowAfterEnd) {
         });
         b.log.push(`🐧 所有小企鹅攻击力 +${f.v}`);
         break;
+      case 'summonHealAll': {
+        let total = 0;
+        livingSummons(b).forEach((summon) => {
+          const maxHp = summon.maxHp || summon.hp;
+          const healed = Math.min(f.v, Math.max(0, maxHp - summon.hp));
+          if (!healed) return;
+          summon.hp += healed;
+          total += healed;
+          b.events.push({ kind: 'heal', text: '+' + healed, side: 'summon', uid: summon.uid });
+        });
+        b.log.push(
+          total
+            ? `💚 召唤物共恢复 ${total} 点生命`
+            : '💚 所有召唤物状态良好，无需治疗',
+        );
+        break;
+      }
       case 'summonAttack': {
         const living = livingSummons(b);
         if (living.length && b.enemies[target] && b.enemies[target].hp > 0)

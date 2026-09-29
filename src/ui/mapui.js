@@ -6,7 +6,7 @@
    CARDS, POTIONS, TILE, TILE_ACTION, ENEMIES, BUFFS, EVENTS, RARITY, canMoveTo, walkTo, tileAt,
    currentSceneTile, performSceneAction, runTotals, POTION_SLOTS, buffDesc, buffScopeText, cardSellPrice,
    refresh, openPileView, flushBattleFx, enterCurrentScene, WORLD_BIOMES, ensureTile, debugPlaceTile,
-   biomeColorAt, worldDangerAt */
+   biomeIdAt, WORLD_BIOME_RGB, textureImageCache, worldDangerAt, assetSpriteElement */
 
 let biomeBackdropCache = null;
 let fogBackdropCache = null;
@@ -16,6 +16,40 @@ let mapCameraRun = null;
 let mapCameraWorld = null;
 let mapViewRevision = 0;
 let mapMoveAnimating = false;
+
+const WORLD_TILE_IMAGE = {
+  start: 'assets/world/icons/camp_spawn.webp',
+  extract: 'assets/world/icons/extraction_point.webp',
+  combat: 'assets/world/icons/combat.webp',
+  elite: 'assets/world/icons/elite_combat.webp',
+  loot: 'assets/world/icons/loot_chest.webp',
+  potion: 'assets/world/icons/potion_cache.webp',
+  buff: 'assets/world/icons/rune_stone.webp',
+  shop: 'assets/world/icons/merchant_tent.webp',
+  fire: 'assets/world/icons/campfire.webp',
+  event: 'assets/world/icons/random_event.webp',
+  hazard: 'assets/world/icons/danger_zone.webp',
+};
+const WORLD_TERRAIN_IMAGE = {
+  woodland: 'assets/world/terrain_forest.webp',
+  volcanic: 'assets/world/terrain_volcanic_waste.webp',
+  snowfield: 'assets/world/terrain_snowmountain.webp',
+  swamp: 'assets/world/terrain_swamp.webp',
+  ruins: 'assets/world/terrain_ruins.webp',
+};
+const WORLD_BLOCKED_IMAGE = {
+  高山: 'assets/world/obstacles/snow_ridge_wall.webp',
+  黑曜石墙: 'assets/world/obstacles/obsidian_wall.webp',
+  密林: 'assets/world/obstacles/forest_wall.webp',
+  倒塌石墙: 'assets/world/obstacles/ruin_wall.webp',
+};
+const WORLD_FEATURE_IMAGE = {
+  深泥潭: 'assets/world/obstacles/swamp_mudpit.webp',
+  熔岩裂隙: 'assets/world/obstacles/lava_fissure.webp',
+  暴雪: 'assets/world/obstacles/blizzard_marker.webp',
+};
+const WORLD_PLAYER_IMAGE = 'assets/world/icons/player_marker.webp';
+const WORLD_SUMMON_IMAGE = 'assets/world/icons/penguin_summon.webp';
 
 function deckIds() {
   const out = [];
@@ -186,12 +220,12 @@ function mapView() {
               }),
             ]),
             tileActionBar(cur),
-            mapDebugPanel(),
             mapLogPanel(),
           ],
         ),
       ]),
     ]),
+    mapDebugPanel(),
   ]);
 }
 
@@ -222,7 +256,9 @@ function animatePlayerMove(c, r) {
   const minR = Number(viewport.dataset.mapMinR) || 0;
   const targetLeft = (Number(fromTile.style.left.replace('px', '')) || 0) + (c - from.c) * stride;
   const targetTop = (Number(fromTile.style.top.replace('px', '')) || 0) + (r - from.r) * stride;
+  const followers = (run.summons || []).filter((summon) => summon.hp > 0);
   const sprite = el('div', { class: 'player-travel-sprite', 'aria-hidden': 'true' }, [
+    worldSummonFollowers(followers),
     el('span', { text: '🧙' }),
   ]);
   sprite.style.left = fromTile.style.left;
@@ -488,10 +524,10 @@ function environmentLegend() {
 function paintBiomeBackdrop(canvas, map, minC, minR, maxC, maxR, cssWidth, cssHeight) {
   const columns = maxC - minC + 1;
   const rows = maxR - minR + 1;
-  const pixelBudget = 60000;
+  const pixelBudget = 240000;
   const pixelsPerTile = Math.max(
     1,
-    Math.min(16, Math.floor(Math.sqrt(pixelBudget / (columns * rows)))),
+    Math.min(48, Math.floor(Math.sqrt(pixelBudget / (columns * rows)))),
   );
   const width = columns * pixelsPerTile;
   const height = rows * pixelsPerTile;
@@ -517,21 +553,79 @@ function paintBiomeBackdrop(canvas, map, minC, minR, maxC, maxR, cssWidth, cssHe
   const cacheContext = cacheCanvas.getContext('2d');
   if (!cacheContext) return;
   const image = cacheContext.createImageData(width, height);
+  const biomeMaskData = Object.create(null);
+  Object.keys(WORLD_BIOMES).forEach((id) => {
+    biomeMaskData[id] = cacheContext.createImageData(width, height);
+  });
+  /* 用环境噪声结果制作独立蒙版：纹理跟随环境边界，不读取贴图像素。 */
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const color = biomeColorAt(
-        map,
-        minC + (x + 0.5) / pixelsPerTile,
-        minR + (y + 0.5) / pixelsPerTile,
-      );
+      const worldX = minC + (x + 0.5) / pixelsPerTile;
+      const worldY = minR + (y + 0.5) / pixelsPerTile;
+      const biomeId = biomeIdAt(map, worldX, worldY);
+      const color = WORLD_BIOME_RGB[biomeId];
       const index = (y * width + x) * 4;
       image.data[index] = color[0];
       image.data[index + 1] = color[1];
       image.data[index + 2] = color[2];
       image.data[index + 3] = 255;
+      const mask = biomeMaskData[biomeId];
+      if (mask) {
+        mask.data[index] = 255;
+        mask.data[index + 1] = 255;
+        mask.data[index + 2] = 255;
+        mask.data[index + 3] = 255;
+      }
     }
   }
   cacheContext.putImageData(image, 0, 0);
+
+  /* 先把各环境纹理拼进一张与视野同尺寸的大画布，再按环境颜色区域裁切。 */
+  const terrainCanvas = document.createElement('canvas');
+  terrainCanvas.width = width;
+  terrainCanvas.height = height;
+  const terrainContext = terrainCanvas.getContext('2d');
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = width;
+  maskCanvas.height = height;
+  const maskContext = maskCanvas.getContext('2d');
+  const layerCanvas = document.createElement('canvas');
+  layerCanvas.width = width;
+  layerCanvas.height = height;
+  const layerContext = layerCanvas.getContext('2d');
+  if (!terrainContext || !maskContext || !layerContext) return;
+
+  Object.keys(WORLD_BIOMES).forEach((id) => {
+    const textureImage = textureImageCache[WORLD_TERRAIN_IMAGE[id]];
+    const maskData = biomeMaskData[id];
+    const textureWidth = textureImage && (textureImage.naturalWidth || textureImage.width);
+    if (!textureWidth || !maskData) return;
+
+    maskContext.putImageData(maskData, 0, 0);
+    layerContext.clearRect(0, 0, width, height);
+    const pattern = layerContext.createPattern(textureImage, 'repeat');
+    if (!pattern) return;
+    if (typeof pattern.setTransform === 'function' && typeof DOMMatrix === 'function') {
+      const scale = pixelsPerTile / 64;
+      const offsetX = -(((minC % 4) + 4) % 4) * pixelsPerTile;
+      const offsetY = -(((minR % 4) + 4) % 4) * pixelsPerTile;
+      pattern.setTransform(new DOMMatrix([scale, 0, 0, scale, offsetX, offsetY]));
+    }
+    layerContext.fillStyle = pattern;
+    layerContext.fillRect(0, 0, width, height);
+    layerContext.globalCompositeOperation = 'destination-in';
+    layerContext.drawImage(maskCanvas, 0, 0);
+    layerContext.globalCompositeOperation = 'source-over';
+    terrainContext.drawImage(layerCanvas, 0, 0);
+  });
+
+  /* 用完整的环境色彩图作为最终蒙版，确保整张拼接纹理只覆盖有效地表。 */
+  terrainContext.globalCompositeOperation = 'destination-in';
+  terrainContext.drawImage(cacheCanvas, 0, 0);
+  terrainContext.globalCompositeOperation = 'source-over';
+  cacheContext.globalAlpha = 0.58;
+  cacheContext.drawImage(terrainCanvas, 0, 0);
+  cacheContext.globalAlpha = 1;
   biomeBackdropCache = { key, width, height, canvas: cacheCanvas };
   context.drawImage(cacheCanvas, 0, 0, width, height);
 }
@@ -633,6 +727,19 @@ function paintFogBackdrop(
   }
 }
 
+function mapAssetImage(src, className) {
+  return assetSpriteElement(src, className);
+}
+
+function mapTileIcon(type, fallback) {
+  const image = WORLD_TILE_IMAGE[type];
+  if (!image) return el('div', { class: 'tile-emoji', text: fallback });
+  return el('div', { class: 'tile-emoji has-image' }, [
+    el('span', { class: 'tile-image-fallback', text: fallback }),
+    mapAssetImage(image, 'tile-image'),
+  ]);
+}
+
 function tileCell(t) {
   const reach = canMoveTo(t.c, t.r);
   const isHere = run.pos.c === t.c && run.pos.r === t.r;
@@ -642,6 +749,7 @@ function tileCell(t) {
   if (t.visited) t.revealed = true;
   const pending = t.spawned && !t.cleared && t.type !== 'start';
   const foes = pending && t.payload ? t.payload.map((id) => ENEMIES[id].emoji).join('') : '';
+  const followers = isHere ? (run.summons || []).filter((summon) => summon.hp > 0) : [];
   const cls = [
     'tile',
     't-' + t.type,
@@ -671,11 +779,15 @@ function tileCell(t) {
       kids.push(
         el('div', { class: 'terrain-3d-icon', 'aria-hidden': 'true' }, [
           el('span', { class: 'terrain-3d-shadow' }),
-          el('span', { class: 'terrain-3d-object', text: t.terrain.emoji || '🧱' }),
+          el('span', { class: 'terrain-3d-object' }, [
+            WORLD_BLOCKED_IMAGE[t.terrain.name]
+              ? mapAssetImage(WORLD_BLOCKED_IMAGE[t.terrain.name], 'terrain-object-image')
+              : el('span', { text: t.terrain.emoji || '🧱' }),
+          ]),
         ]),
       );
     } else {
-      kids.push(el('div', { class: 'tile-emoji', text: info.emoji }));
+      kids.push(mapTileIcon(t.type, info.emoji));
     }
     kids.push(
       el('div', {
@@ -695,6 +807,17 @@ function tileCell(t) {
     kids.push(el('div', { class: 'tile-emoji', text: '❓' }));
     kids.push(el('div', { class: 'tile-name', text: '' }));
   }
+  const featureImage =
+    t.revealed && !blocked && t.terrain ? WORLD_FEATURE_IMAGE[t.terrain.name] : null;
+  if (featureImage) {
+    kids.push(
+      el(
+        'span',
+        { class: 'terrain-feature-badge', title: t.terrain.name, 'aria-label': t.terrain.name },
+        [mapAssetImage(featureImage, 'terrain-feature-image')],
+      ),
+    );
+  }
   if (pending) kids.push(el('div', { class: 'tile-new', text: '待处理' }));
   if (reach && !isHere) kids.push(el('div', { class: 'tile-move-hint', text: '移动' }));
   if (reach && t.type === 'hazard' && !t.cleared) {
@@ -703,7 +826,11 @@ function tileCell(t) {
   if (isHere) {
     kids.push(
       el('div', { class: 'tile-here', 'aria-label': '玩家当前位置' }, [
-        el('span', { class: 'player-location-icon', text: '🧙' }),
+        worldSummonFollowers(followers),
+        el('span', { class: 'player-location-icon' }, [
+          el('span', { class: 'player-location-fallback', text: '🧙' }),
+          mapAssetImage(WORLD_PLAYER_IMAGE, 'player-location-image'),
+        ]),
         el('span', { class: 'player-location-label', text: '你' }),
       ]),
     );
@@ -741,6 +868,47 @@ function tileCell(t) {
   );
 }
 
+function worldSummonFollowers(summons) {
+  if (!summons.length) return null;
+  const labels = summons.map(
+    (summon) => `${summon.name}（${summon.attack} 攻 / ${summon.hp}/${summon.maxHp} 血）`,
+  );
+  const visible = summons.slice(0, 3).map((summon) => {
+    const image = summon.id === 'penguin' ? WORLD_SUMMON_IMAGE : summon.image;
+    return (
+      el(
+        'span',
+        {
+          class: 'world-summon-icon',
+          title: `${summon.name} · ${summon.attack} 攻 · ${summon.hp}/${summon.maxHp} 血`,
+          'aria-hidden': 'true',
+        },
+        [
+          el('span', { class: 'world-summon-fallback', text: summon.emoji || '🐾' }),
+          image ? mapAssetImage(image, 'world-summon-image') : null,
+        ],
+      )
+    );
+  });
+  if (summons.length > visible.length) {
+    visible.push(
+      el('span', {
+        class: 'world-summon-overflow',
+        text: '+' + (summons.length - visible.length),
+      }),
+    );
+  }
+  return el(
+    'div',
+    {
+      class: 'world-summon-followers',
+      title: `同行召唤物：${labels.join('、')}`,
+      'aria-label': `同行召唤物：${labels.join('、')}`,
+    },
+    visible,
+  );
+}
+
 /* 地图只负责显示地点与移动；当前地点的操作都在场景界面中。 */
 function tileActionBar(cur) {
   if (!cur) return el('div', { class: 'tile-actions' });
@@ -763,10 +931,14 @@ function mapDebugPanel() {
   const tool = ui.mapDebug;
   if (!tool.open) return null;
   const tileOptions = Object.keys(TILE).filter((id) => id !== 'start');
-  const select = (value, entries, onChange) =>
-    el(
+  const select = (value, entries, onChange) => {
+    const node = el(
       'select',
-      { class: 'map-debug-select', value, onchange: (event) => onChange(event.target.value) },
+      {
+        class: 'map-debug-select',
+        onchange: (event) => onChange(event.target.value),
+        onpointerdown: (event) => event.stopPropagation(),
+      },
       entries.map((entry) =>
         el('option', {
           value: entry.value,
@@ -775,10 +947,20 @@ function mapDebugPanel() {
         }),
       ),
     );
-  return el('div', { class: 'map-debug-panel' }, [
-    el('strong', { text: '地块调试器' }),
+    node.value = value;
+    return node;
+  };
+  return el('div', { class: 'map-debug-panel map-debug-window', role: 'dialog', 'aria-label': '地块调试器' }, [
+    el('div', { class: 'map-debug-titlebar' }, [
+      el('strong', { text: '🧰 地块调试器' }),
+      btn('×', 'ghost small map-debug-close', () => {
+        tool.open = false;
+        tool.active = false;
+        refresh();
+      }),
+    ]),
     el('label', { class: 'map-debug-field' }, [
-      el('span', { text: '地点' }),
+      el('span', { text: '要放置的地点' }),
       select(
         tool.tileType,
         tileOptions.map((id) => ({ value: id, label: TILE[id].emoji + ' ' + TILE[id].name })),
@@ -789,7 +971,7 @@ function mapDebugPanel() {
       ),
     ]),
     el('label', { class: 'map-debug-field' }, [
-      el('span', { text: '环境' }),
+      el('span', { text: '地块环境' }),
       select(
         tool.biome,
         Object.entries(WORLD_BIOMES).map(([id, biome]) => ({
@@ -811,20 +993,21 @@ function mapDebugPanel() {
           refresh();
         },
       }),
-      el('span', { text: '放置时设为不可通过的墙壁' }),
+      el('span', { text: '同时设为不可通过的墙壁' }),
     ]),
     btn(
-      tool.active ? '退出放置模式' : '启用放置模式',
-      tool.active ? 'primary small' : 'ghost small',
+      tool.active ? '⏸ 暂停放置' : '📍 开始放置',
+      tool.active ? 'ghost small' : 'primary small',
       () => {
         tool.active = !tool.active;
         refresh();
       },
     ),
     el('small', {
+      class: 'map-debug-help',
       text: tool.active
-        ? '点击地图上任意可见坐标放置，不会移动玩家。'
-        : '选好地点和环境后启用放置模式。',
+        ? '放置模式已开启：点击窗口外的可见地块即可设置；可以连续放置。'
+        : '设置好地点和环境后，点击“开始放置”，再点地图地块。',
     }),
   ]);
 }

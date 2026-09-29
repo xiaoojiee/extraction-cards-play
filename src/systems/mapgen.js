@@ -106,6 +106,10 @@ function biomeAtSignal(signal) {
   return 'snowfield';
 }
 
+function biomeIdAt(map, x, y) {
+  return biomeAtSignal(biomeSignal(map, x, y));
+}
+
 function biomeCoverage(map, c, r, samples) {
   const coverage = Object.create(null);
   const side = samples || 8;
@@ -131,7 +135,7 @@ function biomeFor(map, c, r) {
 }
 
 function biomeColorAt(map, x, y) {
-  return WORLD_BIOME_RGB[biomeAtSignal(biomeSignal(map, x, y))];
+  return WORLD_BIOME_RGB[biomeIdAt(map, x, y)];
 }
 
 function terrainFor(map, c, r, biomeId, forceWall) {

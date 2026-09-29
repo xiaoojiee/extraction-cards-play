@@ -1,0 +1,267 @@
+{
+  "cards": {
+    "file": "assets/atlases/cards.webp",
+    "cols": 4,
+    "rows": 4,
+    "cellWidth": 320,
+    "cellHeight": 426,
+    "sprites": [
+      {
+        "source": "assets/cards/basic_attack_art.webp",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "source": "assets/cards/basic_defend_art.webp",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "source": "assets/cards/basic_heal_art.webp",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "source": "assets/cards/attack_draw_art.webp",
+        "col": 3,
+        "row": 0
+      },
+      {
+        "source": "assets/cards/armor_break_attack_art.webp",
+        "col": 0,
+        "row": 1
+      },
+      {
+        "source": "assets/cards/enhanced_defense_art.webp",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "source": "assets/cards/defense_stance_art.webp",
+        "col": 2,
+        "row": 1
+      },
+      {
+        "source": "assets/卡面/刘华强.webp",
+        "col": 3,
+        "row": 1
+      },
+      {
+        "source": "assets/卡面/瓜摊老板.webp",
+        "col": 0,
+        "row": 2
+      },
+      {
+        "source": "assets/卡面/耄耋.webp",
+        "col": 1,
+        "row": 2
+      },
+      {
+        "source": "assets/卡面/大狗.webp",
+        "col": 2,
+        "row": 2
+      },
+      {
+        "source": "assets/卡面/咕咕嘎嘎-香企鹅.webp",
+        "col": 3,
+        "row": 2
+      },
+      {
+        "source": "assets/卡面/咕咕嘎嘎-凑企鹅.webp",
+        "col": 0,
+        "row": 3
+      }
+    ]
+  },
+  "characters": {
+    "file": "assets/atlases/characters.webp",
+    "cols": 4,
+    "rows": 2,
+    "cellWidth": 192,
+    "cellHeight": 192,
+    "sprites": [
+      {
+        "source": "assets/卡面/刘华强.webp",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "source": "assets/卡面/瓜摊老板.webp",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "source": "assets/卡面/耄耋.webp",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "source": "assets/卡面/大狗.webp",
+        "col": 3,
+        "row": 0
+      },
+      {
+        "source": "assets/卡面/咕咕嘎嘎-香企鹅.webp",
+        "col": 0,
+        "row": 1
+      },
+      {
+        "source": "assets/卡面/咕咕嘎嘎-凑企鹅.webp",
+        "col": 1,
+        "row": 1
+      }
+    ]
+  },
+  "terrain": {
+    "file": "assets/atlases/terrain.webp",
+    "cols": 5,
+    "rows": 1,
+    "cellWidth": 256,
+    "cellHeight": 256,
+    "sprites": [
+      {
+        "source": "assets/world/terrain_forest.webp",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "source": "assets/world/terrain_volcanic_waste.webp",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "source": "assets/world/terrain_snowmountain.webp",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "source": "assets/world/terrain_swamp.webp",
+        "col": 3,
+        "row": 0
+      },
+      {
+        "source": "assets/world/terrain_ruins.webp",
+        "col": 4,
+        "row": 0
+      }
+    ]
+  },
+  "map-icons": {
+    "file": "assets/atlases/map-icons.webp",
+    "cols": 4,
+    "rows": 4,
+    "cellWidth": 128,
+    "cellHeight": 128,
+    "sprites": [
+      {
+        "source": "assets/world/icons/camp_spawn.webp",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "source": "assets/world/icons/extraction_point.webp",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "source": "assets/world/icons/combat.webp",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "source": "assets/world/icons/elite_combat.webp",
+        "col": 3,
+        "row": 0
+      },
+      {
+        "source": "assets/world/icons/loot_chest.webp",
+        "col": 0,
+        "row": 1
+      },
+      {
+        "source": "assets/world/icons/potion_cache.webp",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "source": "assets/world/icons/rune_stone.webp",
+        "col": 2,
+        "row": 1
+      },
+      {
+        "source": "assets/world/icons/merchant_tent.webp",
+        "col": 3,
+        "row": 1
+      },
+      {
+        "source": "assets/world/icons/campfire.webp",
+        "col": 0,
+        "row": 2
+      },
+      {
+        "source": "assets/world/icons/random_event.webp",
+        "col": 1,
+        "row": 2
+      },
+      {
+        "source": "assets/world/icons/danger_zone.webp",
+        "col": 2,
+        "row": 2
+      },
+      {
+        "source": "assets/world/icons/player_marker.webp",
+        "col": 3,
+        "row": 2
+      },
+      {
+        "source": "assets/world/icons/penguin_summon.webp",
+        "col": 0,
+        "row": 3
+      }
+    ]
+  },
+  "obstacles": {
+    "file": "assets/atlases/obstacles.webp",
+    "cols": 4,
+    "rows": 2,
+    "cellWidth": 256,
+    "cellHeight": 256,
+    "sprites": [
+      {
+        "source": "assets/world/obstacles/snow_ridge_wall.webp",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "source": "assets/world/obstacles/obsidian_wall.webp",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "source": "assets/world/obstacles/forest_wall.webp",
+        "col": 2,
+        "row": 0
+      },
+      {
+        "source": "assets/world/obstacles/ruin_wall.webp",
+        "col": 3,
+        "row": 0
+      },
+      {
+        "source": "assets/world/obstacles/swamp_mudpit.webp",
+        "col": 0,
+        "row": 1
+      },
+      {
+        "source": "assets/world/obstacles/lava_fissure.webp",
+        "col": 1,
+        "row": 1
+      },
+      {
+        "source": "assets/world/obstacles/blizzard_marker.webp",
+        "col": 2,
+        "row": 1
+      }
+    ]
+  }
+}
